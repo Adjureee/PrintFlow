@@ -67,7 +67,7 @@ if (!self.define) {
     });
   };
 }
-define(['./workbox-3b23c8c3'], (function (workbox) { 'use strict';
+define(['./workbox-13942bd7'], (function (workbox) { 'use strict';
 
   self.skipWaiting();
   workbox.clientsClaim();
@@ -77,31 +77,59 @@ define(['./workbox-3b23c8c3'], (function (workbox) { 'use strict';
    * See https://goo.gl/S9QRab
    */
   workbox.precacheAndRoute([{
-    "url": "/offline.html",
-    "revision": "0.l4u7qf7di4s"
+    "url": "/index.html",
+    "revision": "0.403b2l1ig6o"
   }], {});
   workbox.cleanupOutdatedCaches();
-  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("/offline.html"), {
-    allowlist: [/^\/$/]
+  workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("/index.html"), {
+    allowlist: [/^\/$/],
+    denylist: [/^\/api\//]
   }));
+  workbox.registerRoute(({
+    request
+  }) => request.mode === "navigate", new workbox.NetworkFirst({
+    "cacheName": "printflow-pages",
+    "networkTimeoutSeconds": 4,
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 32,
+      maxAgeSeconds: 604800
+    }), new workbox.CacheableResponsePlugin({
+      statuses: [0, 200]
+    })]
+  }), 'GET');
   workbox.registerRoute(({
     request
   }) => ["style", "script", "worker", "manifest"].includes(request.destination), new workbox.StaleWhileRevalidate({
     "cacheName": "printflow-static-assets",
-    plugins: []
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 64,
+      maxAgeSeconds: 2592000
+    })]
   }), 'GET');
   workbox.registerRoute(({
     request
   }) => request.destination === "image", new workbox.CacheFirst({
     "cacheName": "printflow-images",
     plugins: [new workbox.ExpirationPlugin({
-      maxEntries: 60,
+      maxEntries: 80,
       maxAgeSeconds: 2592000
+    })]
+  }), 'GET');
+  workbox.registerRoute(/^https:\/\/.*\.tile\.openstreetmap\.org\//i, new workbox.CacheFirst({
+    "cacheName": "printflow-map-tiles",
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 200,
+      maxAgeSeconds: 1209600
+    }), new workbox.CacheableResponsePlugin({
+      statuses: [0, 200]
     })]
   }), 'GET');
   workbox.registerRoute(/^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//i, new workbox.StaleWhileRevalidate({
     "cacheName": "printflow-fonts",
-    plugins: []
+    plugins: [new workbox.ExpirationPlugin({
+      maxEntries: 20,
+      maxAgeSeconds: 31536000
+    })]
   }), 'GET');
 
 }));

@@ -6,6 +6,7 @@ import PrintSettings from './pages/student/PrintSettings';
 import OrderStatus from './pages/student/OrderStatus';
 import Profile from './pages/student/Profile';
 import ChatAssistant from './pages/student/ChatAssistant';
+import ShopProfilePage from './pages/student/ShopProfilePage';
 import ShopHome from './pages/shop/ShopHome';
 import ShopOrderDetail from './pages/shop/ShopOrderDetail';
 import ShopProfile from './pages/shop/ShopProfile';
@@ -45,7 +46,7 @@ export const router = createBrowserRouter([
             Component: PrintSettings,
           },
           {
-            path: 'status',
+            path: 'status/:orderId',
             Component: OrderStatus,
           },
           {
@@ -53,7 +54,11 @@ export const router = createBrowserRouter([
             Component: Profile,
           },
           {
-            path: 'chat',
+            path: 'shops/:shopSlug',
+            Component: ShopProfilePage,
+          },
+          {
+            path: 'shops/:shopSlug/contact',
             Component: ChatAssistant,
           },
         ],

@@ -21,11 +21,14 @@ export function ProtectedRoute() {
   }
 
   // Redirect based on user type
-  const isShopRoute = location.pathname.startsWith('/shop');
-  const isStudentRoute = location.pathname === '/' || 
-                         location.pathname.startsWith('/settings') || 
-                         location.pathname.startsWith('/status') || 
-                         (location.pathname.startsWith('/profile') && !location.pathname.startsWith('/shop'));
+  const isShopRoute =
+    location.pathname === '/shop' || location.pathname.startsWith('/shop/');
+  const isStudentRoute =
+    location.pathname === '/' ||
+    location.pathname.startsWith('/settings') ||
+    location.pathname.startsWith('/status') ||
+    location.pathname.startsWith('/shops') ||
+    (location.pathname.startsWith('/profile') && !isShopRoute);
 
   // If shop user tries to access student routes, redirect to shop dashboard
   if (user.userType === 'shop' && isStudentRoute) {

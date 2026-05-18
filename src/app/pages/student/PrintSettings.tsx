@@ -1,23 +1,30 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Printer, CreditCard, Check, Sparkles, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Printer, CreditCard, Check, Sparkles, ChevronRight, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { QRCodeSVG } from 'qrcode.react';
-import { calculatePrintCost, orderStore, type PrintSettings as PrintSettingsType } from '../../lib/store';
+import { calculatePrintCost, type PrintSettings as PrintSettingsType } from '../../lib/store';
+import { createOrder } from '../../lib/orders-api';
+import { uploadDocumentToCloudinary, CloudinaryUploadError } from '../../lib/cloudinary-api';
+import { getPendingPrintFile, clearPendingPrintFile } from '../../lib/print-session';
+import { useAuth } from '../../lib/auth-context';
 
 export default function PrintSettings() {
   const navigate = useNavigate();
+  const { user, accessToken } = useAuth();
   const [settings, setSettings] = useState<PrintSettingsType>({
     color: 'bw',
     size: 'letter',
     copies: 1,
   });
   const [gcashRefNumber, setGcashRefNumber] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const fileName = sessionStorage.getItem('printFile') || 'document.pdf';
   const locationData = sessionStorage.getItem('printLocation');
@@ -25,25 +32,59 @@ export default function PrintSettings() {
 
   const totalAmount = calculatePrintCost(settings);
 
-  const handleSubmitOrder = () => {
+  const handleSubmitOrder = async () => {
     if (!gcashRefNumber.trim()) {
-      alert('Please enter your GCash reference number');
+      toast.error('Please enter your GCash reference number');
       return;
     }
 
-    const newOrder = orderStore.createOrder({
-      studentName: 'Current Student',
-      studentId: 'STU-2024-999',
-      fileName,
-      fileUrl: 'mock://uploaded-file.pdf',
-      location: location.name,
-      settings,
-      gcashRefNumber: gcashRefNumber.trim(),
-      totalAmount,
-      status: 'awaiting-verification',
-    });
+    setSubmitting(true);
+    let fileUrl = 'mock://uploaded-file.pdf';
+    let cloudinaryPublicId: string | undefined;
+    const pendingFile = getPendingPrintFile();
 
-    navigate('/status');
+    try {
+      if (pendingFile && accessToken) {
+        try {
+          const uploaded = await uploadDocumentToCloudinary(pendingFile, accessToken);
+          fileUrl = uploaded.secureUrl;
+          cloudinaryPublicId = uploaded.publicId;
+        } catch (err) {
+          if (err instanceof CloudinaryUploadError) {
+            toast.error(err.message);
+          } else {
+            toast.error('Document upload failed');
+          }
+          console.error('Cloudinary upload failed:', err);
+          return;
+        }
+      }
+
+      const newOrder = await createOrder(
+        {
+          studentName: user?.name ?? 'Student',
+          studentId: user?.studentId ?? 'STU-UNKNOWN',
+          fileName,
+          fileUrl,
+          cloudinaryPublicId,
+          location: location.name,
+          settings,
+          gcashRefNumber: gcashRefNumber.trim(),
+          totalAmount,
+          userId: user?.id,
+        },
+        accessToken,
+      );
+
+      clearPendingPrintFile();
+      sessionStorage.removeItem('printFile');
+      navigate(`/status/${encodeURIComponent(newOrder.id)}`);
+    } catch (err) {
+      console.error('Order creation failed:', err);
+      toast.error('Failed to submit order. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -116,7 +157,7 @@ export default function PrintSettings() {
                         <p className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Standard printing</p>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <span className="text-base sm:text-lg font-bold text-[#00736D] block">₱5</span>
+                        <span className="text-base sm:text-lg font-bold text-[#00736D] block">Γé▒5</span>
                         <span className="text-[10px] sm:text-xs text-gray-600">/page</span>
                       </div>
                     </Label>
@@ -139,7 +180,7 @@ export default function PrintSettings() {
                         <p className="text-[10px] sm:text-xs text-gray-600 mt-0.5">Vibrant printing</p>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <span className="text-base sm:text-lg font-bold text-[#00736D] block">₱15</span>
+                        <span className="text-base sm:text-lg font-bold text-[#00736D] block">Γé▒15</span>
                         <span className="text-[10px] sm:text-xs text-gray-600">/page</span>
                       </div>
                     </Label>
@@ -160,9 +201,9 @@ export default function PrintSettings() {
                 className="grid grid-cols-3 gap-2 sm:gap-3"
               >
                 {[
-                  { value: 'letter', label: 'Letter', size: '8.5" × 11"' },
-                  { value: 'legal', label: 'Legal', size: '8.5" × 14"' },
-                  { value: 'a4', label: 'A4', size: '210 × 297mm' },
+                  { value: 'letter', label: 'Letter', size: '8.5" ├ù 11"' },
+                  { value: 'legal', label: 'Legal', size: '8.5" ├ù 14"' },
+                  { value: 'a4', label: 'A4', size: '210 ├ù 297mm' },
                 ].map((option) => (
                   <motion.div key={option.value} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <div className={`relative p-3 sm:p-4 border-2 rounded-lg sm:rounded-xl cursor-pointer transition-all ${
@@ -197,7 +238,7 @@ export default function PrintSettings() {
                   className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl border-2 border-[#80B9B6]/30 hover:bg-[#E6F1F0] flex-shrink-0"
                   onClick={() => setSettings({ ...settings, copies: Math.max(1, settings.copies - 1) })}
                 >
-                  <span className="text-lg sm:text-xl font-bold">−</span>
+                  <span className="text-lg sm:text-xl font-bold">ΓêÆ</span>
                 </Button>
                 <Input
                   id="copies"
@@ -244,10 +285,10 @@ export default function PrintSettings() {
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.3 }}
               >
-                ₱{totalAmount}
+                Γé▒{totalAmount}
               </motion.p>
               <p className="text-[10px] sm:text-xs opacity-75 mt-2 break-words px-2">
-                {settings.copies} {settings.copies === 1 ? 'copy' : 'copies'} • {settings.color.toUpperCase()} • {settings.size.toUpperCase()}
+                {settings.copies} {settings.copies === 1 ? 'copy' : 'copies'} ΓÇó {settings.color.toUpperCase()} ΓÇó {settings.size.toUpperCase()}
               </p>
             </div>
 
@@ -265,7 +306,7 @@ export default function PrintSettings() {
               </div>
               <div className="mt-3 sm:mt-4 p-3 bg-[#E6F1F0] rounded-lg border border-[#80B9B6]/30">
                 <p className="text-xs sm:text-sm text-center text-[#00736D] font-semibold">
-                  Open GCash → Scan QR → Pay ₱{totalAmount}
+                  Open GCash ΓåÆ Scan QR ΓåÆ Pay Γé▒{totalAmount}
                 </p>
               </div>
             </div>
@@ -281,7 +322,7 @@ export default function PrintSettings() {
                 className="text-base sm:text-lg h-12 sm:h-14 border-2 border-[#80B9B6]/30 focus:border-[#00736D] font-mono"
               />
               <p className="text-[10px] sm:text-xs text-gray-600 flex items-start gap-1.5 sm:gap-2">
-                <span className="text-[#00736D] flex-shrink-0">💡</span>
+                <span className="text-[#00736D] flex-shrink-0">≡ƒÆí</span>
                 <span>You can find this 13-digit reference number on your GCash receipt after payment</span>
               </p>
             </div>
@@ -297,11 +338,20 @@ export default function PrintSettings() {
         >
           <Button
             className="w-full h-12 sm:h-14 text-sm sm:text-base font-bold bg-gradient-to-r from-[#00736D] to-[#002E2C] hover:opacity-90 shadow-lg shadow-[#00736D]/30 hover:shadow-xl hover:shadow-[#00736D]/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={handleSubmitOrder}
-            disabled={!gcashRefNumber.trim()}
+            onClick={() => void handleSubmitOrder()}
+            disabled={!gcashRefNumber.trim() || submitting}
           >
-            <span>Submit Order & Track Status</span>
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2" />
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              <>
+                <span>Submit Order & Track Status</span>
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 ml-2" />
+              </>
+            )}
           </Button>
         </motion.div>
       </div>

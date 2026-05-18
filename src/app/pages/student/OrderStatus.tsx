@@ -1,32 +1,83 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useNavigate, Navigate } from 'react-router';
 import { ArrowLeft, CheckCircle2, Clock, Printer, Package, Home, Sparkles, MapPin, Calendar, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { PageLoader } from '../../components/ui/page-loader';
 import { QRCodeSVG } from 'qrcode.react';
-import { orderStore, getStatusLabel, type Order, type OrderStatus } from '../../lib/store';
+import { fetchOrderById, type OrderFetchState } from '../../lib/orders-api';
+import { useAuth } from '../../lib/auth-context';
+import type { Order, OrderStatus } from '../../lib/store';
 
 export default function OrderStatus() {
-  const { orderId } = useParams();
+  const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
+  const { accessToken } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
+  const [fetchState, setFetchState] = useState<OrderFetchState>('idle');
+
+  const loadOrder = useCallback(async () => {
+    if (!orderId?.trim()) {
+      setOrder(null);
+      setFetchState('not_found');
+      return;
+    }
+    setFetchState('loading');
+    try {
+      const result = await fetchOrderById(orderId, accessToken);
+      if (result) {
+        setOrder(result);
+        setFetchState('success');
+      } else {
+        setOrder(null);
+        setFetchState('not_found');
+      }
+    } catch (err) {
+      console.error('Order fetch failed:', err);
+      setOrder(null);
+      setFetchState('error');
+      toast.error('Failed to load order');
+    }
+  }, [orderId, accessToken]);
 
   useEffect(() => {
-    if (orderId) {
-      const foundOrder = orderStore.getOrderById(orderId);
-      setOrder(foundOrder || null);
+    void loadOrder();
+  }, [loadOrder]);
 
-      const interval = setInterval(() => {
-        const updatedOrder = orderStore.getOrderById(orderId);
-        setOrder(updatedOrder || null);
-      }, 2000);
+  useEffect(() => {
+    if (fetchState !== 'success' || !orderId) return;
+    const interval = setInterval(() => {
+      void fetchOrderById(orderId, accessToken).then((updated) => {
+        if (updated) setOrder(updated);
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [fetchState, orderId, accessToken]);
 
-      return () => clearInterval(interval);
-    }
-  }, [orderId]);
+  if (!orderId?.trim()) {
+    return <Navigate to="/" replace />;
+  }
 
-  if (!order) {
+  if (fetchState === 'loading' || fetchState === 'idle') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#E6F1F0] via-white to-[#E6F1F0]">
+        <PageLoader label="Loading order status…" />
+      </div>
+    );
+  }
+
+  if (fetchState === 'error') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p className="font-medium text-[#002E2C]">Could not load order.</p>
+        <Button onClick={() => void loadOrder()}>Retry</Button>
+      </div>
+    );
+  }
+
+  if (fetchState === 'not_found' || !order) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#E6F1F0] via-white to-[#E6F1F0] flex items-center justify-center p-4">
         <div className="text-center">
@@ -34,7 +85,7 @@ export default function OrderStatus() {
             <Package className="w-10 h-10 sm:w-12 sm:h-12 text-[#00736D]" />
           </div>
           <p className="text-gray-600 mb-6 text-base sm:text-lg font-medium">Order not found</p>
-          <Button onClick={() => navigate('/student')} className="bg-gradient-to-r from-[#00736D] to-[#002E2C] hover:opacity-90 h-11 sm:h-12 px-5 sm:px-6">
+          <Button onClick={() => navigate('/')} className="bg-gradient-to-r from-[#00736D] to-[#002E2C] hover:opacity-90 h-11 sm:h-12 px-5 sm:px-6">
             Back to Home
           </Button>
         </div>
@@ -60,7 +111,7 @@ export default function OrderStatus() {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => navigate('/student')} 
+              onClick={() => navigate('/')} 
               className="rounded-xl hover:bg-[#E6F1F0] h-9 w-9 sm:h-10 sm:w-10"
             >
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -315,7 +366,7 @@ export default function OrderStatus() {
           <Button
             variant="outline"
             className="w-full h-12 sm:h-14 border-2 border-[#80B9B6]/50 hover:bg-[#E6F1F0] hover:border-[#00736D] font-bold text-sm sm:text-base rounded-xl transition-all"
-            onClick={() => navigate('/student')}
+            onClick={() => navigate('/')}
           >
             <Home className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
             Back to Home

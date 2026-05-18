@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams, Navigate } from 'react-router';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft,
@@ -15,33 +15,93 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
+import { fetchOrderById, type OrderFetchState } from '../../lib/orders-api';
+import { useAuth } from '../../lib/auth-context';
+import { PageLoader } from '../../components/ui/page-loader';
+import type { Order } from '../../lib/store';
+
+const SIZE_LABELS: Record<string, string> = {
+  letter: 'Letter (8.5" × 11")',
+  legal: 'Legal (8.5" × 14")',
+  a4: 'A4 (210 × 297mm)',
+};
+
+function formatSettings(order: Order) {
+  return {
+    color: order.settings.color === 'bw' ? 'Black & White' : 'Full Color',
+    size: SIZE_LABELS[order.settings.size] ?? order.settings.size,
+    copies: order.settings.copies,
+  };
+}
 
 export default function ShopOrderDetail() {
   const navigate = useNavigate();
-  const { orderId } = useParams();
+  const { orderId } = useParams<{ orderId: string }>();
+  const { accessToken } = useAuth();
+  const [order, setOrder] = useState<Order | null>(null);
+  const [fetchState, setFetchState] = useState<OrderFetchState>('idle');
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
 
-  // Mock order data
-  const order = {
-    id: orderId || 'ORD-001',
-    studentName: 'John Doe',
-    studentId: 'STU-2024-001',
-    email: 'john.doe@university.edu',
-    phone: '+63 912 345 6789',
-    fileName: 'Assignment_Chapter_5.pdf',
-    status: 'awaiting-verification',
-    totalAmount: 45.50,
-    gcashRef: 'GCH-123456789',
-    timestamp: '2026-04-01T10:30:00',
-    location: 'Main Library',
-    claimCode: 'CLAIM-12345',
-    settings: {
-      color: 'Black & White',
-      size: 'Letter (8.5" x 11")',
-      copies: 5
+  const loadOrder = useCallback(async () => {
+    if (!orderId?.trim()) {
+      setOrder(null);
+      setFetchState('not_found');
+      return;
     }
-  };
+    setFetchState('loading');
+    try {
+      const result = await fetchOrderById(orderId, accessToken);
+      if (result) {
+        setOrder(result);
+        setFetchState('success');
+      } else {
+        setOrder(null);
+        setFetchState('not_found');
+      }
+    } catch (err) {
+      console.error('Shop order fetch failed:', err);
+      setOrder(null);
+      setFetchState('error');
+      toast.error('Failed to load order');
+    }
+  }, [orderId, accessToken]);
+
+  useEffect(() => {
+    void loadOrder();
+  }, [loadOrder]);
+
+  if (!orderId?.trim()) {
+    return <Navigate to="/shop" replace />;
+  }
+
+  if (fetchState === 'loading' || fetchState === 'idle') {
+    return (
+      <div className="min-h-screen bg-[#E6F1F0]/30">
+        <PageLoader label="Loading order…" />
+      </div>
+    );
+  }
+
+  if (fetchState === 'error') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p className="font-medium text-[#002E2C]">Could not load order.</p>
+        <Button onClick={() => void loadOrder()}>Retry</Button>
+      </div>
+    );
+  }
+
+  if (fetchState === 'not_found' || !order) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p className="text-gray-600">Order not found</p>
+        <Button onClick={() => navigate('/shop')}>Back to Dashboard</Button>
+      </div>
+    );
+  }
+
+  const displaySettings = formatSettings(order);
 
   const handleVerifyAccept = () => {
     toast.success('Order verified and accepted!');
@@ -109,7 +169,15 @@ export default function ShopOrderDetail() {
     };
   };
 
-  const dateTime = formatDateTime(order.timestamp);
+  const dateTime = formatDateTime(order.createdAt.toISOString());
+
+  const handleDownload = () => {
+    if (!order.fileUrl || order.fileUrl.startsWith('mock://')) {
+      toast.error('Document not available for download');
+      return;
+    }
+    window.open(order.fileUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div className="min-h-screen bg-[#E6F1F0]/30">
@@ -187,13 +255,13 @@ export default function ShopOrderDetail() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-[#80B9B6] mb-1 font-medium">Email</p>
-                  <p className="text-xs sm:text-sm text-[#002E2C]/70 break-all">{order.email}</p>
+                  <p className="text-xs text-[#80B9B6] mb-1 font-medium">Location</p>
+                  <p className="text-xs sm:text-sm text-[#002E2C]/70 break-all">{order.location}</p>
                 </div>
                 
                 <div>
-                  <p className="text-xs text-[#80B9B6] mb-1 font-medium">Phone</p>
-                  <p className="text-xs sm:text-sm text-[#002E2C]/70">{order.phone}</p>
+                  <p className="text-xs text-[#80B9B6] mb-1 font-medium">Claim Code</p>
+                  <p className="text-xs sm:text-sm font-mono text-[#002E2C]/70">{order.claimCode}</p>
                 </div>
               </div>
             </div>
@@ -220,6 +288,8 @@ export default function ShopOrderDetail() {
                   <Button 
                     variant="ghost" 
                     size="sm"
+                    type="button"
+                    onClick={handleDownload}
                     className="flex-shrink-0 hover:bg-white hover:text-[#00736D]"
                   >
                     <Download className="w-4 h-4" />
@@ -233,17 +303,17 @@ export default function ShopOrderDetail() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div>
                   <p className="text-xs text-[#80B9B6] mb-1 font-medium">Copies</p>
-                  <p className="text-xl sm:text-2xl font-bold text-[#002E2C]">{order.settings.copies}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-[#002E2C]">{displaySettings.copies}</p>
                 </div>
                 
                 <div>
                   <p className="text-xs text-[#80B9B6] mb-1 font-medium">Color Mode</p>
-                  <p className="text-sm sm:text-base font-semibold text-[#002E2C]">{order.settings.color}</p>
+                  <p className="text-sm sm:text-base font-semibold text-[#002E2C]">{displaySettings.color}</p>
                 </div>
                 
                 <div className="col-span-2 sm:col-span-1">
                   <p className="text-xs text-[#80B9B6] mb-1 font-medium">Paper Size</p>
-                  <p className="text-sm sm:text-base font-semibold text-[#002E2C]">{order.settings.size}</p>
+                  <p className="text-sm sm:text-base font-semibold text-[#002E2C]">{displaySettings.size}</p>
                 </div>
               </div>
 
@@ -254,7 +324,7 @@ export default function ShopOrderDetail() {
                 <div>
                   <p className="text-xs text-[#80B9B6] mb-1 font-medium">GCash Reference</p>
                   <p className="text-sm font-mono text-[#002E2C] bg-[#E6F1F0]/50 px-3 py-2 rounded border border-[#80B9B6]/20">
-                    {order.gcashRef}
+                    {order.gcashRefNumber}
                   </p>
                 </div>
 

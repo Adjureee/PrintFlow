@@ -36,13 +36,8 @@ export interface PrintLocation {
   lng: number;
 }
 
-// Mock data
-export const mockLocations: PrintLocation[] = [
-  { id: '1', name: 'Ink Masters Print Shop', waitTime: 5, status: 'online', lat: 7.3025, lng: 125.6815 },
-  { id: '2', name: 'QuickPrint Solutions', waitTime: 12, status: 'online', lat: 7.3010, lng: 125.6795 },
-  { id: '3', name: 'GigaPrint Partners', waitTime: 8, status: 'online', lat: 7.2995, lng: 125.6800 },
-  { id: '4', name: 'Campus Edge Printing', waitTime: 15, status: 'online', lat: 7.3015, lng: 125.6820 },
-];
+export { PRINT_SHOPS, printShopLocations as mockLocations } from './print-shops';
+export type { PrintShop } from './print-shops';
 
 let mockOrders: Order[] = [
   {

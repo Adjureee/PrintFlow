@@ -84,21 +84,21 @@ export function InstallAppButton() {
 
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 sm:left-auto sm:right-4 sm:w-auto">
-      <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur">
+      <div className="rounded-2xl border border-[#80B9B6]/30 bg-white/90 p-3 shadow-2xl shadow-[#002E2C]/10 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#00736D] to-[#002E2C] text-white shadow-md">
             <Download className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-900">
-              Install PrintFlow App
-            </p>
-            <p className="text-sm text-slate-600">
-              Add PrintFlow to your home screen for faster access and offline
-              use.
+            <p className="text-sm font-bold text-[#002E2C]">Install PrintFlow</p>
+            <p className="text-sm text-[#00736D]">
+              Add to your home screen for offline access on Android.
             </p>
           </div>
-          <Button onClick={handleInstall} className="shrink-0">
+          <Button
+            onClick={handleInstall}
+            className="shrink-0 bg-[#00736D] hover:bg-[#002E2C]"
+          >
             Install
           </Button>
         </div>

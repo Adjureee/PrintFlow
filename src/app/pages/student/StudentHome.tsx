@@ -2,14 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Upload, MapPin, Clock, Printer, ChevronRight, Zap, LogOut,
-  Bell, Sparkles, X, CheckCircle2, FileText, Calendar,
-  ChevronLeft, AlertCircle,
+  Bell, CheckCircle2, FileText, Calendar,
+  ChevronLeft, AlertCircle, Star, ChevronDown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../../components/ui/button';
 import { PrintStationsMap } from '../../components/PrintStationsMap';
+import { ShopProfileSheet } from '../../components/ShopProfileSheet';
+import { PRINT_SHOPS, DNSC_CENTER, type PrintShop } from '../../lib/print-shops';
 import { mockLocations, type PrintLocation, calculateDistance } from '../../lib/store';
 import { useAuth } from '../../lib/auth-context';
+import { setPendingPrintFile } from '../../lib/print-session';
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -54,19 +57,13 @@ export default function StudentHome() {
   const [calendarStart, setCalendarStart] = useState(0);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [showTooltip, setShowTooltip] = useState(true);
   const [showMap, setShowMap] = useState(true);
+  const [profileShop, setProfileShop] = useState<PrintShop | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
-
-  /* auto-hide tooltip */
-  useEffect(() => {
-    const t = setTimeout(() => setShowTooltip(false), 4000);
-    return () => clearTimeout(t);
-  }, []);
 
   /* geolocation */
   useEffect(() => {
-    const fallback = { lat: 7.3013, lng: 125.6806 };
+    const fallback = { lat: DNSC_CENTER.lat, lng: DNSC_CENTER.lng };
     if (!navigator.geolocation) { setUserLocation(fallback); return; }
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
@@ -107,6 +104,7 @@ export default function StudentHome() {
 
   const handleContinue = () => {
     if (!selectedFile || !selectedLocation) return;
+    setPendingPrintFile(selectedFile);
     sessionStorage.setItem('printFile', selectedFile.name);
     sessionStorage.setItem('printLocation', JSON.stringify(selectedLocation));
     if (mode === 'later' && selectedSlot) {
@@ -415,26 +413,30 @@ export default function StudentHome() {
 
           {/* Shop list */}
           <div className="space-y-2.5">
-            {mockLocations.map((loc, i) => {
-              const isSelected = selectedLocation?.id === loc.id;
+            {PRINT_SHOPS.map((shop, i) => {
+              const loc = mockLocations.find((l) => l.id === shop.id)!;
+              const isSelected = selectedLocation?.id === shop.id;
               const etaColor =
-                loc.waitTime <= 5 ? 'text-green-600 bg-green-50'
-                : loc.waitTime <= 10 ? 'text-amber-600 bg-amber-50'
-                : 'text-orange-600 bg-orange-50';
+                shop.waitTime <= 5 ? 'text-green-700 bg-green-50'
+                : shop.waitTime <= 10 ? 'text-amber-700 bg-amber-50'
+                : 'text-orange-700 bg-orange-50';
               return (
-                <motion.button
-                  key={loc.id}
+                <motion.div
+                  key={shop.id}
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.06 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => handleLocationSelect(loc)}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all text-left ${
+                  className={`overflow-hidden rounded-2xl border-2 transition-all ${
                     isSelected
-                      ? 'border-[#00736D] bg-gradient-to-r from-[#E6F1F0] to-[#80B9B6]/20 shadow-md shadow-[#00736D]/10'
+                      ? 'border-[#00736D] bg-gradient-to-r from-[#E6F1F0] to-white shadow-md shadow-[#00736D]/10'
                       : 'border-[#80B9B6]/20 bg-white hover:border-[#00736D]/30 hover:shadow-sm'
                   }`}
                 >
+                  <button
+                    type="button"
+                    onClick={() => handleLocationSelect(loc)}
+                    className="flex w-full items-center gap-3 p-3.5 text-left active:scale-[0.99]"
+                  >
                   {/* Icon */}
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
                     isSelected
@@ -446,12 +448,17 @@ export default function StudentHome() {
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-[#002E2C] font-bold text-sm truncate">{loc.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${etaColor}`}>
-                        {loc.waitTime} min ETA
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-bold text-[#002E2C]">{shop.name}</p>
+                      {shop.isFlagship && (
+                        <Star className="h-3 w-3 shrink-0 fill-[#00736D] text-[#00736D]" />
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${etaColor}`}>
+                        {shop.waitTime} min ETA
                       </span>
-                      {loc.waitTime <= 5 && (
+                      {shop.waitTime <= 5 && (
                         <span className="text-[10px] font-semibold text-green-600 flex items-center gap-0.5">
                           <Zap className="w-2.5 h-2.5" /> Fast
                         </span>
@@ -462,11 +469,24 @@ export default function StudentHome() {
                   {/* Status dot + check */}
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <div className={`w-2 h-2 rounded-full ${
-                      loc.status === 'online' ? 'bg-green-500 shadow-sm shadow-green-500/60' : 'bg-gray-300'
+                      shop.status === 'online' ? 'bg-green-500 shadow-sm shadow-green-500/60' : 'bg-rose-400'
                     }`} />
                     {isSelected && <CheckCircle2 className="w-5 h-5 text-[#00736D]" />}
                   </div>
-                </motion.button>
+                  </button>
+                  <div className="border-t border-[#80B9B6]/15 px-3 pb-3">
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => navigate(`/shops/${shop.slug}`)}
+                      className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-[#E6F1F0]/80 py-2 text-[11px] font-bold text-[#00736D]"
+                    >
+                      View Profile
+                      <ChevronDown className="h-3 w-3 -rotate-90" />
+                    </motion.button>
+                  </div>
+                </motion.div>
               );
             })}
           </div>
@@ -474,41 +494,7 @@ export default function StudentHome() {
 
       </div>{/* end scroll area */}
 
-      {/* ── AI FAB ────────────────────────────────────────────────── */}
-      <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2">
-        {/* Tooltip */}
-        <AnimatePresence>
-          {showTooltip && (
-            <motion.div
-              initial={{ opacity: 0, y: 6, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.92 }}
-              className="relative bg-[#002E2C] text-white text-xs font-semibold px-3.5 py-2 rounded-2xl shadow-xl whitespace-nowrap max-w-[200px] text-center"
-            >
-              Ask Gemini to schedule your print!
-              {/* Arrow */}
-              <div className="absolute -bottom-1.5 right-5 w-3 h-3 bg-[#002E2C] rotate-45 rounded-sm" />
-              <button
-                onClick={() => setShowTooltip(false)}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#80B9B6]/30 rounded-full flex items-center justify-center hover:bg-[#80B9B6]/60 transition-colors"
-              >
-                <X className="w-2.5 h-2.5 text-white" />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* FAB Button */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.92 }}
-          onClick={() => navigate('/chat')}
-          className="flex items-center gap-2 bg-gradient-to-r from-[#00736D] to-[#002E2C] text-white px-4 py-3 rounded-2xl shadow-2xl shadow-[#00736D]/40 font-bold text-sm"
-        >
-          <Sparkles className="w-4 h-4" />
-          AI Assistant
-        </motion.button>
-      </div>
+      <ShopProfileSheet shop={profileShop} onClose={() => setProfileShop(null)} />
 
       {/* ── STICKY BOTTOM CTA ─────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[#80B9B6]/20 px-4 py-4 shadow-2xl shadow-black/10">

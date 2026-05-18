@@ -1,37 +1,45 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { type PrintLocation } from '../lib/store';
-import { Clock, Navigation, MapPin } from 'lucide-react';
-import { Card } from './ui/card';
-import { useState, useEffect } from 'react';
+import { Clock, Navigation, MapPin, Star } from 'lucide-react';
+import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { DNSC_CENTER } from '../lib/print-shops';
+import type { PrintLocation } from '../lib/store';
 
 interface PrintStationsMapProps {
   locations: PrintLocation[];
   selectedLocation: PrintLocation | null;
   onLocationSelect: (location: PrintLocation) => void;
-  userLocation?: { lat: number, lng: number } | null;
+  userLocation?: { lat: number; lng: number } | null;
 }
 
-// Helper: strictly validate a coordinate value
 const isValidCoord = (v: unknown): v is number =>
   typeof v === 'number' && isFinite(v) && !isNaN(v);
 
-// Helper: check that a location has safe lat/lng
 const hasValidCoords = (loc: PrintLocation) =>
   isValidCoord(loc.lat) && isValidCoord(loc.lng);
 
-// ─── Error Boundary ──────────────────────────────────────────────────────────
-interface EBState { hasError: boolean }
-class MapErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, EBState> {
-  state: EBState = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(err: Error, info: ErrorInfo) { console.warn('PrintStationsMap error:', err, info); }
-  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+interface EBState {
+  hasError: boolean;
 }
 
-// ─── Map controller ──────────────────────────────────────────────────────────
+class MapErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  EBState
+> {
+  state: EBState = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: Error, info: ErrorInfo) {
+    console.warn('PrintStationsMap error:', err, info);
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
 function MapController({
   selectedLocation,
   userLocation,
@@ -44,7 +52,9 @@ function MapController({
   useEffect(() => {
     try {
       if (selectedLocation && hasValidCoords(selectedLocation)) {
-        map.flyTo([selectedLocation.lat, selectedLocation.lng], 17, { duration: 1.5 });
+        map.flyTo([selectedLocation.lat, selectedLocation.lng], 17, {
+          duration: 1.5,
+        });
       } else if (
         userLocation &&
         isValidCoord(userLocation.lat) &&
@@ -52,45 +62,33 @@ function MapController({
       ) {
         map.flyTo([userLocation.lat, userLocation.lng], 16, { duration: 1.5 });
       }
-    } catch (_) {
-      // Swallow any internal Leaflet navigation errors
+    } catch {
+      /* swallow Leaflet navigation errors */
     }
   }, [selectedLocation, userLocation, map]);
 
   return null;
 }
 
-// ─── Main component ──────────────────────────────────────────────────────────
 function PrintStationsMapInner({
   locations,
   selectedLocation,
   onLocationSelect,
   userLocation,
 }: PrintStationsMapProps) {
-  // Only render markers for locations with valid coordinates
   const safeLocations = (locations ?? []).filter(hasValidCoords);
 
-  // Compute a safe center
-  const lats = safeLocations.map((l) => l.lat);
-  const lngs = safeLocations.map((l) => l.lng);
-  const centerLat =
-    lats.length > 0
-      ? lats.reduce((a, b) => a + b, 0) / lats.length
-      : 7.3013;
-  const centerLng =
-    lngs.length > 0
-      ? lngs.reduce((a, b) => a + b, 0) / lngs.length
-      : 125.6806;
+  const centerLat = DNSC_CENTER.lat;
+  const centerLng = DNSC_CENTER.lng;
 
-  // Final safety guard — if somehow still NaN, bail out
   if (!isValidCoord(centerLat) || !isValidCoord(centerLng)) {
     return (
-      <Card className="flex items-center justify-center w-full h-[400px] border-2">
-        <div className="text-center text-gray-500 space-y-2">
-          <MapPin className="w-10 h-10 mx-auto opacity-40" />
-          <p className="text-sm font-medium">Map unavailable</p>
+      <div className="flex h-[420px] w-full items-center justify-center rounded-3xl border border-[#80B9B6]/30 bg-white/80 backdrop-blur-md">
+        <div className="space-y-2 text-center text-[#80B9B6]">
+          <MapPin className="mx-auto h-10 w-10 opacity-40" />
+          <p className="text-sm font-medium text-[#002E2C]">Map unavailable</p>
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -102,44 +100,51 @@ function PrintStationsMapInner({
       : null;
 
   const createCustomIcon = (location: PrintLocation, isSelected: boolean) => {
-    let colorClass = 'bg-green-500';
-    if (location.waitTime > 5) colorClass = 'bg-yellow-500';
+    const isFlagship = location.id === 'printflow-hub-dnsc';
+    let colorClass = 'bg-[#00736D]';
+    if (location.waitTime > 5) colorClass = 'bg-amber-500';
     if (location.waitTime > 10) colorClass = 'bg-orange-500';
-    const ringClass = isSelected ? 'ring-4 ring-blue-500/50 scale-125' : '';
+    const ringClass = isSelected
+      ? 'ring-4 ring-[#00736D]/40 scale-125'
+      : 'hover:scale-110';
+    const flagshipBadge = isFlagship
+      ? `<span class="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#002E2C] text-[8px] text-white shadow-md">★</span>`
+      : '';
 
     return L.divIcon({
       className: 'custom-div-icon',
       html: `
-        <div class="relative flex items-center justify-center w-10 h-10 rounded-full border-2 border-white shadow-lg ${colorClass} ${ringClass} transition-transform duration-300">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div class="group relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2 border-white shadow-lg transition-transform duration-300 ${colorClass} ${ringClass}">
+          ${flagshipBadge}
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 6 2 18 2 18 9"></polyline>
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
             <rect width="12" height="8" x="6" y="14"></rect>
           </svg>
-          <div class="absolute -bottom-6 left-1/2 transform -translate-x-1/2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white whitespace-nowrap shadow-md ${colorClass}">
+          <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-md ${colorClass}">
             ${location.waitTime}m
           </div>
         </div>
       `,
-      iconSize: [40, 40],
-      iconAnchor: [20, 20],
-      popupAnchor: [0, -20],
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -24],
     });
   };
 
   const userIcon = L.divIcon({
     className: 'custom-div-icon',
     html: `
-      <div class="relative flex items-center justify-center w-8 h-8 rounded-full border-2 border-white shadow-lg bg-blue-600 ring-4 ring-blue-300">
-        <div class="w-3 h-3 bg-white rounded-full"></div>
+      <div class="relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-[#002E2C] shadow-lg ring-4 ring-[#80B9B6]/50 transition-transform duration-300 hover:scale-110">
+        <div class="h-3 w-3 rounded-full bg-white"></div>
       </div>
     `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
   });
 
   return (
-    <Card className="relative w-full h-[400px] overflow-hidden shadow-lg border-2 z-0">
+    <div className="relative h-[420px] w-full overflow-hidden rounded-3xl border border-[#80B9B6]/25 shadow-xl shadow-[#002E2C]/10">
       <MapContainer
         center={[centerLat, centerLng]}
         zoom={16}
@@ -147,15 +152,18 @@ function PrintStationsMapInner({
         zoomControl={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MapController selectedLocation={selectedLocation} userLocation={safeUserLocation} />
+        <MapController
+          selectedLocation={selectedLocation}
+          userLocation={safeUserLocation}
+        />
 
-        {/* Render Locations */}
         {safeLocations.map((location) => {
           const isSelected = selectedLocation?.id === location.id;
+          const isFlagship = location.id === 'printflow-hub-dnsc';
           return (
             <Marker
               key={location.id}
@@ -163,20 +171,27 @@ function PrintStationsMapInner({
               icon={createCustomIcon(location, isSelected)}
               eventHandlers={{ click: () => onLocationSelect(location) }}
             >
-              <Popup className="custom-popup">
-                <div className="font-sans min-w-[180px]">
-                  <h4 className="font-bold text-sm text-gray-900">{location.name}</h4>
-                  <div className="flex items-center gap-1 text-xs text-gray-600 mt-1 mb-2">
-                    <Clock className="w-3 h-3" />
-                    <span>{location.waitTime} min wait</span>
+              <Popup className="printflow-popup">
+                <div className="min-w-[200px] font-sans">
+                  <div className="mb-2 flex items-center gap-2">
+                    <h4 className="text-sm font-black text-[#002E2C]">{location.name}</h4>
+                    {isFlagship && (
+                      <span className="rounded-full bg-[#E6F1F0] px-1.5 py-0.5 text-[9px] font-bold text-[#00736D]">
+                        Flagship
+                      </span>
+                    )}
+                  </div>
+                  <div className="mb-2 flex items-center gap-1 text-xs text-[#00736D]">
+                    <Clock className="h-3 w-3" />
+                    <span className="font-semibold">{location.waitTime} min wait</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <div
-                      className={`w-2 h-2 rounded-full ${
-                        location.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
+                      className={`h-2 w-2 rounded-full ${
+                        location.status === 'online' ? 'bg-green-500' : 'bg-rose-400'
                       }`}
                     />
-                    <span className="text-gray-700">
+                    <span className="font-medium text-[#002E2C]/80">
                       {location.status === 'online' ? 'Online & Ready' : 'Offline'}
                     </span>
                   </div>
@@ -186,10 +201,12 @@ function PrintStationsMapInner({
           );
         })}
 
-        {/* User Location & Geofence */}
         {safeUserLocation && (
           <>
-            <Marker position={[safeUserLocation.lat, safeUserLocation.lng]} icon={userIcon}>
+            <Marker
+              position={[safeUserLocation.lat, safeUserLocation.lng]}
+              icon={userIcon}
+            >
               <Popup>You are here</Popup>
             </Marker>
             <Circle
@@ -197,56 +214,60 @@ function PrintStationsMapInner({
               radius={500}
               pathOptions={{
                 fillColor: '#00736D',
-                fillOpacity: 0.1,
+                fillOpacity: 0.08,
                 color: '#00736D',
-                weight: 1,
+                weight: 1.5,
+                dashArray: '6 4',
               }}
             />
           </>
         )}
       </MapContainer>
 
-      {/* Legend */}
-      <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm rounded-xl p-3 shadow-lg border-2 border-gray-200 z-[1000] pointer-events-none">
-        <p className="text-xs font-semibold text-gray-700 mb-2">Partner Shops</p>
+      <div className="pointer-events-none absolute left-4 top-4 z-[1000] rounded-2xl border border-[#80B9B6]/30 bg-white/80 px-3 py-2 shadow-lg backdrop-blur-md">
+        <div className="flex items-center gap-2 text-xs font-bold text-[#002E2C]">
+          <Star className="h-3.5 w-3.5 fill-[#00736D] text-[#00736D]" />
+          <span>DNSC Campus · PrintFlow Hub</span>
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-4 right-4 z-[1000] rounded-2xl border border-[#80B9B6]/30 bg-white/85 p-3 shadow-lg backdrop-blur-md">
+        <p className="mb-2 text-xs font-black text-[#002E2C]">Wait Times</p>
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-gray-600">≤ 5 min</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="text-gray-600">6-10 min</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <div className="w-3 h-3 rounded-full bg-orange-500" />
-            <span className="text-gray-600">&gt; 10 min</span>
-          </div>
+          {[
+            { color: 'bg-[#00736D]', label: '≤ 5 min' },
+            { color: 'bg-amber-500', label: '6–10 min' },
+            { color: 'bg-orange-500', label: '> 10 min' },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-2 text-xs">
+              <div className={`h-3 w-3 rounded-full ${color}`} />
+              <span className="font-medium text-[#002E2C]/70">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
       {safeUserLocation && (
-        <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 shadow-md border-2 border-blue-200 z-[1000] pointer-events-none">
-          <div className="flex items-center gap-2 text-xs text-blue-700 font-semibold">
-            <Navigation className="w-3 h-3" />
-            <span>Geofence Active (500m)</span>
+        <div className="pointer-events-none absolute right-4 top-4 z-[1000] rounded-xl border border-[#80B9B6]/30 bg-white/85 px-3 py-2 shadow-md backdrop-blur-md">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#00736D]">
+            <Navigation className="h-3 w-3" />
+            <span>Geofence · 500m</span>
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
-// ─── Public export wrapped in error boundary ─────────────────────────────────
 export function PrintStationsMap(props: PrintStationsMapProps) {
   const fallback = (
-    <Card className="flex items-center justify-center w-full h-[400px] border-2 bg-[#E6F1F0]/30">
-      <div className="text-center text-[#80B9B6] space-y-2 px-6">
-        <MapPin className="w-10 h-10 mx-auto opacity-60" />
+    <div className="flex h-[420px] w-full items-center justify-center rounded-3xl border border-[#80B9B6]/30 bg-[#E6F1F0]/30 backdrop-blur-sm">
+      <div className="space-y-2 px-6 text-center">
+        <MapPin className="mx-auto h-10 w-10 text-[#80B9B6] opacity-60" />
         <p className="text-sm font-semibold text-[#002E2C]">Map could not load</p>
-        <p className="text-xs text-gray-500">Use the list below to select a partner shop.</p>
+        <p className="text-xs text-[#80B9B6]">Use the list below to select a partner shop.</p>
       </div>
-    </Card>
+    </div>
   );
 
   return (
