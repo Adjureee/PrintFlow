@@ -1,16 +1,16 @@
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+import { projectId } from "../../../utils/supabase/info";
 
-const FUNCTIONS_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-73bd5aa5`;
+const FUNCTIONS_BASE = `https://${projectId}.supabase.co/functions/v1/server`;
 
 export interface ShopChatMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   text: string;
 }
 
 export interface ShopChatContext {
   slug: string;
   name: string;
-  status: 'online' | 'offline';
+  status: "online" | "offline";
   address: string;
   hours: string;
   services: string[];
@@ -32,7 +32,7 @@ export class ShopChatError extends Error {
     public fallback = false,
   ) {
     super(message);
-    this.name = 'ShopChatError';
+    this.name = "ShopChatError";
   }
 }
 
@@ -42,11 +42,10 @@ export async function sendShopChatMessage(
   messages: ShopChatMessage[],
 ): Promise<ShopChatReply> {
   const response = await fetch(`${FUNCTIONS_BASE}/shop-chat`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
-      apikey: publicAnonKey,
     },
     body: JSON.stringify({ shop, messages }),
   });
@@ -55,7 +54,7 @@ export async function sendShopChatMessage(
 
   if (!response.ok) {
     throw new ShopChatError(
-      data.error ?? 'Failed to reach PrintFlow assistant',
+      data.error ?? "Failed to reach PrintFlow assistant",
       response.status,
       data.fallback === true || response.status === 503,
     );

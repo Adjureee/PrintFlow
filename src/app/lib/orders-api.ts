@@ -1,15 +1,20 @@
-import { projectId, publicAnonKey } from '../../../utils/supabase/info';
-import { supabase } from './supabase-client';
+import { projectId } from "../../../utils/supabase/info";
+import { supabase } from "./supabase-client";
 import {
   orderStore,
   type Order,
   type OrderStatus,
   type PrintSettings,
-} from './store';
+} from "./store";
 
-const FUNCTIONS_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-73bd5aa5`;
+const FUNCTIONS_BASE = `https://${projectId}.supabase.co/functions/v1/server`;
 
-export type OrderFetchState = 'idle' | 'loading' | 'success' | 'error' | 'not_found';
+export type OrderFetchState =
+  | "idle"
+  | "loading"
+  | "success"
+  | "error"
+  | "not_found";
 
 export interface OrderRow {
   id: string;
@@ -34,7 +39,7 @@ function mapRowToOrder(row: OrderRow): Order {
     studentName: row.student_name,
     studentId: row.student_id,
     fileName: row.file_name,
-    fileUrl: row.file_url ?? '',
+    fileUrl: row.file_url ?? "",
     location: row.location,
     settings: row.settings,
     gcashRefNumber: row.gcash_ref_number,
@@ -48,9 +53,9 @@ function mapRowToOrder(row: OrderRow): Order {
 /** Direct Supabase query (requires `orders` table + RLS). */
 async function fetchOrderFromTable(orderId: string): Promise<Order | null> {
   const { data, error } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('id', orderId)
+    .from("orders")
+    .select("*")
+    .eq("id", orderId)
     .maybeSingle();
 
   if (error) {
@@ -74,19 +79,21 @@ async function fetchOrderViaFunction(
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        apikey: publicAnonKey,
       },
     },
   );
 
-  const payload = (await response.json()) as { order?: OrderRow; error?: string };
+  const payload = (await response.json()) as {
+    order?: OrderRow;
+    error?: string;
+  };
 
   if (response.status === 404) {
     return null;
   }
 
   if (!response.ok) {
-    throw new Error(payload.error ?? 'Failed to load order');
+    throw new Error(payload.error ?? "Failed to load order");
   }
 
   return payload.order ? mapRowToOrder(payload.order) : null;
@@ -107,7 +114,7 @@ export async function fetchOrderById(
       return fromDb;
     }
   } catch (err) {
-    console.warn('Supabase orders table fetch failed, trying API:', err);
+    console.warn("Supabase orders table fetch failed, trying API:", err);
   }
 
   if (accessToken) {
@@ -117,7 +124,7 @@ export async function fetchOrderById(
         return fromApi;
       }
     } catch (err) {
-      console.warn('Orders edge function fetch failed, using mock store:', err);
+      console.warn("Orders edge function fetch failed, using mock store:", err);
     }
   }
 
@@ -155,41 +162,47 @@ export async function createOrder(
     settings: input.settings,
     gcash_ref_number: input.gcashRefNumber,
     total_amount: input.totalAmount,
-    status: 'awaiting-verification',
+    status: "awaiting-verification",
     claim_code: claimCode,
     created_at: new Date().toISOString(),
     user_id: input.userId ?? null,
   };
 
   try {
-    const { data, error } = await supabase.from('orders').insert(row).select().single();
+    const { data, error } = await supabase
+      .from("orders")
+      .insert(row)
+      .select()
+      .single();
 
     if (!error && data) {
       return mapRowToOrder(data as OrderRow);
     }
   } catch (err) {
-    console.warn('Supabase insert failed, trying edge function:', err);
+    console.warn("Supabase insert failed, trying edge function:", err);
   }
 
   if (accessToken) {
     try {
       const response = await fetch(`${FUNCTIONS_BASE}/orders`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
-          apikey: publicAnonKey,
         },
         body: JSON.stringify({ order: row }),
       });
 
-      const payload = (await response.json()) as { order?: OrderRow; error?: string };
+      const payload = (await response.json()) as {
+        order?: OrderRow;
+        error?: string;
+      };
 
       if (response.ok && payload.order) {
         return mapRowToOrder(payload.order);
       }
     } catch (err) {
-      console.warn('Orders edge function create failed:', err);
+      console.warn("Orders edge function create failed:", err);
     }
   }
 
@@ -202,6 +215,6 @@ export async function createOrder(
     settings: input.settings,
     gcashRefNumber: input.gcashRefNumber,
     totalAmount: input.totalAmount,
-    status: 'awaiting-verification',
+    status: "awaiting-verification",
   });
 }

@@ -1,19 +1,21 @@
+// @ts-nocheck
+
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js";
-import * as kv from "./kv_store.tsx";
+import * as kv from "./kv_store.ts";
 const app = new Hono();
 
 // Enable logger
-app.use('*', logger(console.log));
+app.use("*", logger(console.log));
 
 // Enable CORS for all routes and methods
 app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -21,12 +23,12 @@ app.use(
 );
 
 // Health check endpoint
-app.get("/make-server-73bd5aa5/health", (c) => {
+app.get("/server/health", (c) => {
   return c.json({ status: "ok" });
 });
 
 // Signup endpoint
-app.post("/make-server-73bd5aa5/signup", async (c) => {
+app.post("/server/signup", async (c) => {
   try {
     const { email, password, name, userType } = await c.req.json();
 
@@ -35,8 +37,8 @@ app.post("/make-server-73bd5aa5/signup", async (c) => {
     }
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') || '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
     );
 
     const { data, error } = await supabase.auth.admin.createUser({
@@ -44,89 +46,102 @@ app.post("/make-server-73bd5aa5/signup", async (c) => {
       password,
       user_metadata: { name, userType },
       // Automatically confirm the user's email since an email server hasn't been configured.
-      email_confirm: true
+      email_confirm: true,
     });
 
     if (error) {
-      console.error('Signup error:', error);
-      
+      console.error("Signup error:", error);
+
       // Handle specific error codes
-      if (error.message.includes('already been registered') || error.code === 'email_exists') {
-        return c.json({ error: 'An account with this email already exists. Please sign in instead.' }, 422);
+      if (
+        error.message.includes("already been registered") ||
+        error.code === "email_exists"
+      ) {
+        return c.json(
+          {
+            error:
+              "An account with this email already exists. Please sign in instead.",
+          },
+          422,
+        );
       }
-      
+
       return c.json({ error: error.message }, 400);
     }
 
-    return c.json({ 
-      success: true, 
-      message: "Account created successfully. Please sign in." 
+    return c.json({
+      success: true,
+      message: "Account created successfully. Please sign in.",
     });
   } catch (error) {
-    console.error('Signup error during account creation:', error);
-    return c.json({ error: "Failed to create account. Please try again." }, 500);
+    console.error("Signup error during account creation:", error);
+    return c.json(
+      { error: "Failed to create account. Please try again." },
+      500,
+    );
   }
 });
 
 // Update profile endpoint
-app.post("/make-server-73bd5aa5/update-profile", async (c) => {
+app.post("/server/update-profile", async (c) => {
   try {
-    const accessToken = c.req.header('Authorization')?.split(' ')[1];
-    
+    const accessToken = c.req.header("Authorization")?.split(" ")[1];
+
     if (!accessToken) {
-      return c.json({ error: 'Unauthorized' }, 401);
+      return c.json({ error: "Unauthorized" }, 401);
     }
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') || '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
     );
 
     // Verify user
-    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-    
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(accessToken);
+
     if (authError || !user) {
-      console.error('Auth error:', authError);
-      return c.json({ error: 'Unauthorized' }, 401);
+      console.error("Auth error:", authError);
+      return c.json({ error: "Unauthorized" }, 401);
     }
 
     // Get profile data from request
-    const { name, phone, address, studentId, shopLocation, waitTime } = await c.req.json();
+    const { name, phone, address, studentId, shopLocation, waitTime } =
+      await c.req.json();
 
     // Update user metadata
-    const { data, error } = await supabase.auth.admin.updateUserById(
-      user.id,
-      {
-        user_metadata: {
-          ...user.user_metadata,
-          name: name || user.user_metadata?.name,
-          phone: phone || user.user_metadata?.phone || '',
-          address: address || user.user_metadata?.address || '',
-          studentId: studentId || user.user_metadata?.studentId || '',
-          shopLocation: shopLocation || user.user_metadata?.shopLocation || '',
-          waitTime: waitTime || user.user_metadata?.waitTime || '',
-        }
-      }
-    );
+    const { data, error } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        ...user.user_metadata,
+        name: name || user.user_metadata?.name,
+        phone: phone || user.user_metadata?.phone || "",
+        address: address || user.user_metadata?.address || "",
+        studentId: studentId || user.user_metadata?.studentId || "",
+        shopLocation: shopLocation || user.user_metadata?.shopLocation || "",
+        waitTime: waitTime || user.user_metadata?.waitTime || "",
+      },
+    });
 
     if (error) {
-      console.error('Profile update error:', error);
+      console.error("Profile update error:", error);
       return c.json({ error: error.message }, 400);
     }
 
-    return c.json({ 
-      success: true, 
+    return c.json({
+      success: true,
       message: "Profile updated successfully",
-      user: data.user
+      user: data.user,
     });
   } catch (error) {
-    console.error('Profile update error:', error);
+    console.error("Profile update error:", error);
     return c.json({ error: "Failed to update profile" }, 500);
   }
 });
 
-// Gemini shop auto-reply (offline reservation bot)
-app.post("/make-server-73bd5aa5/shop-chat", async (c) => {
+// Groq shop auto-reply (offline reservation bot)
+app.post("/server/shop-chat", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
     if (!accessToken) {
@@ -147,11 +162,12 @@ app.post("/make-server-73bd5aa5/shop-chat", async (c) => {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) {
+    const groqKey = Deno.env.get("GROQ_API_KEY");
+
+    if (!groqKey) {
       return c.json(
         {
-          error: "Gemini API key not configured on server",
+          error: "AI provider API key not configured on server (GROQ_API_KEY)",
           fallback: true,
         },
         503,
@@ -192,54 +208,104 @@ Respond ONLY with valid JSON matching this schema:
 
 Set reservationConfirmed to true only when the student has agreed to a specific pickup time and you have confirmed it.`;
 
-    const contents = messages.map(
-      (m: { role: string; text: string }) => ({
-        role: m.role === "user" ? "user" : "model",
-        parts: [{ text: m.text }],
-      }),
-    );
+    let rawText = "";
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: systemInstruction }],
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 512,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "object",
-              properties: {
-                message: { type: "string" },
-                reservationConfirmed: { type: "boolean" },
-                pickupTime: { type: "string" },
-                pickupDate: { type: "string" },
-              },
-              required: ["message", "reservationConfirmed"],
+    if (groqKey) {
+      try {
+        const groqRes = await fetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${groqKey}`,
             },
+            body: JSON.stringify({
+              model: "llama-3.1-8b-instant",
+              messages: [
+                { role: "system", content: systemInstruction },
+                ...messages.map((m: { role: string; text: string }) => ({
+                  role: m.role === "user" ? "user" : "assistant",
+                  content: m.text,
+                })),
+              ],
+              max_tokens: 512,
+              temperature: 0.7,
+              response_format: { type: "json_object" },
+            }),
           },
-        }),
-      },
-    );
+        );
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini API error:", geminiRes.status, errText);
+        if (!groqRes.ok) {
+          const errText = await groqRes.text();
+          console.error("Groq API error:", groqRes.status, errText);
+        } else {
+          const groqData = await groqRes.json();
+          rawText = groqData?.choices?.[0]?.message?.content ?? "";
+        }
+      } catch (e) {
+        console.error("Groq request failed:", e);
+      }
+    }
+
+    if (!rawText) {
       return c.json(
         { error: "AI assistant temporarily unavailable", fallback: true },
         502,
       );
     }
 
-    const geminiData = await geminiRes.json();
-    const rawText =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const extractJsonText = (text: string) => {
+      const trimmed = text.trim();
+
+      const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (fenced?.[1]) {
+        return fenced[1].trim();
+      }
+
+      const start = trimmed.indexOf("{");
+      if (start < 0) {
+        return trimmed;
+      }
+
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+
+      for (let i = start; i < trimmed.length; i += 1) {
+        const char = trimmed[i];
+
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+
+        if (char === "\\") {
+          escaped = inString;
+          continue;
+        }
+
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+
+        if (inString) {
+          continue;
+        }
+
+        if (char === "{") {
+          depth += 1;
+        } else if (char === "}") {
+          depth -= 1;
+          if (depth === 0) {
+            return trimmed.slice(start, i + 1);
+          }
+        }
+      }
+
+      return trimmed.slice(start);
+    };
 
     let parsed: {
       message?: string;
@@ -249,9 +315,9 @@ Set reservationConfirmed to true only when the student has agreed to a specific 
     };
 
     try {
-      parsed = JSON.parse(rawText);
+      parsed = JSON.parse(extractJsonText(rawText));
     } catch {
-      console.error("Failed to parse Gemini JSON:", rawText);
+      console.error("Failed to parse AI JSON:", rawText);
       return c.json(
         {
           message:
@@ -272,15 +338,12 @@ Set reservationConfirmed to true only when the student has agreed to a specific 
     });
   } catch (error) {
     console.error("shop-chat error:", error);
-    return c.json(
-      { error: "Failed to process chat", fallback: true },
-      500,
-    );
+    return c.json({ error: "Failed to process chat", fallback: true }, 500);
   }
 });
 
 // Cloudinary signed upload (secrets never sent to browser)
-app.post("/make-server-73bd5aa5/cloudinary-sign", async (c) => {
+app.post("/server/cloudinary-sign", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
     if (!accessToken) {
@@ -308,7 +371,10 @@ app.post("/make-server-73bd5aa5/cloudinary-sign", async (c) => {
       Deno.env.get("CLOUDINARY_UPLOAD_FOLDER") ?? "printflow/documents";
 
     if (!cloudName || !apiKey || !apiSecret) {
-      return c.json({ error: "Cloudinary is not configured on the server" }, 503);
+      return c.json(
+        { error: "Cloudinary is not configured on the server" },
+        503,
+      );
     }
 
     const timestamp = Math.floor(Date.now() / 1000);
@@ -338,7 +404,7 @@ app.post("/make-server-73bd5aa5/cloudinary-sign", async (c) => {
 });
 
 // Fetch single order
-app.get("/make-server-73bd5aa5/orders/:orderId", async (c) => {
+app.get("/server/orders/:orderId", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
     if (!accessToken) {
@@ -387,7 +453,7 @@ app.get("/make-server-73bd5aa5/orders/:orderId", async (c) => {
 });
 
 // Create order
-app.post("/make-server-73bd5aa5/orders", async (c) => {
+app.post("/server/orders", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
     if (!accessToken) {

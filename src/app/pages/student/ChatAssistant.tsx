@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useParams, Navigate } from 'react-router';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate, useParams, Navigate } from "react-router";
 import {
   ArrowLeft,
   Sparkles,
@@ -14,18 +14,18 @@ import {
   Check,
   ShieldCheck,
   Send,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { toast } from 'sonner';
-import { getShopBySlug } from '../../lib/print-shops';
-import { useAuth } from '../../lib/auth-context';
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
+import { getShopBySlug } from "../../lib/print-shops";
+import { useAuth } from "../../lib/auth-context";
 import {
   sendShopChatMessage,
   ShopChatError,
   type ShopChatMessage,
-} from '../../lib/shop-chat-api';
+} from "../../lib/shop-chat-api";
 
-type Role = 'bot' | 'user';
+type Role = "bot" | "user";
 interface Message {
   id: string;
   role: Role;
@@ -37,9 +37,9 @@ interface Message {
 }
 
 function formatTime(date = new Date()) {
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -50,9 +50,9 @@ function newId() {
 function buildGreeting(shopName: string, isOffline: boolean): Message {
   return {
     id: newId(),
-    role: 'bot',
+    role: "bot",
     text: isOffline
-      ? `Hi! ${shopName} is currently offline. I'm their Gemini-powered Offline Auto-Reply Bot — I can secure your print reservation for when they return. What time would you like to pick up?`
+      ? `Hi! ${shopName} is currently offline. I'm the AI-powered Offline Auto-Reply Bot — I can secure your print reservation for when they return. What time would you like to pick up?`
       : `Hi! Welcome to ${shopName}. I can help you reserve a print pickup slot. What would you like to print, and when would you like to pick it up?`,
     time: formatTime(),
   };
@@ -78,7 +78,7 @@ function TypingIndicator() {
               repeat: Infinity,
               duration: 1,
               delay: i * 0.2,
-              ease: 'easeInOut',
+              ease: "easeInOut",
             }}
           />
         ))}
@@ -111,7 +111,7 @@ function ReservationCard({
     <motion.div
       initial={{ opacity: 0, y: 10, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay: 0.2, type: 'spring', damping: 22, stiffness: 280 }}
+      transition={{ delay: 0.2, type: "spring", damping: 22, stiffness: 280 }}
       className="mt-3 overflow-hidden rounded-2xl border border-[#80B9B6]/40 bg-gradient-to-br from-[#E6F1F0]/90 to-[#C5E0DE]/50 backdrop-blur-sm"
     >
       <div className="flex items-center gap-2.5 border-b border-[#80B9B6]/25 bg-[#00736D]/10 px-4 py-3">
@@ -125,24 +125,28 @@ function ReservationCard({
         {[
           {
             icon: <Calendar className="h-3.5 w-3.5" />,
-            label: 'Date',
-            value: pickupDate || 'Today',
+            label: "Date",
+            value: pickupDate || "Today",
           },
           {
             icon: <Clock className="h-3.5 w-3.5" />,
-            label: 'Time',
-            value: pickupTime || 'TBD',
+            label: "Time",
+            value: pickupTime || "TBD",
           },
           {
             icon: <MapPin className="h-3.5 w-3.5" />,
-            label: 'Shop',
+            label: "Shop",
             value: shopName,
           },
         ].map(({ icon, label, value }) => (
           <div key={label} className="flex items-center gap-2.5">
             <span className="text-[#80B9B6]">{icon}</span>
-            <span className="w-10 text-[11px] font-semibold text-[#80B9B6]">{label}</span>
-            <span className="text-[12px] font-black text-[#002E2C]">{value}</span>
+            <span className="w-10 text-[11px] font-semibold text-[#80B9B6]">
+              {label}
+            </span>
+            <span className="text-[12px] font-black text-[#002E2C]">
+              {value}
+            </span>
           </div>
         ))}
       </div>
@@ -151,13 +155,13 @@ function ReservationCard({
 }
 
 function MessageBubble({ msg, shopName }: { msg: Message; shopName: string }) {
-  const isBot = msg.role === 'bot';
+  const isBot = msg.role === "bot";
   return (
     <motion.div
       initial={{ opacity: 0, x: isBot ? -18 : 18, scale: 0.94 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
-      transition={{ type: 'spring', damping: 22, stiffness: 280 }}
-      className={`mb-5 flex items-end gap-2.5 ${isBot ? '' : 'flex-row-reverse'}`}
+      transition={{ type: "spring", damping: 22, stiffness: 280 }}
+      className={`mb-5 flex items-end gap-2.5 ${isBot ? "" : "flex-row-reverse"}`}
     >
       {isBot ? (
         <BotAvatar />
@@ -168,7 +172,7 @@ function MessageBubble({ msg, shopName }: { msg: Message; shopName: string }) {
       )}
 
       <div
-        className={`flex min-w-0 flex-col gap-1.5 ${isBot ? 'max-w-[80%]' : 'max-w-[72%] items-end'}`}
+        className={`flex min-w-0 flex-col gap-1.5 ${isBot ? "max-w-[80%]" : "max-w-[72%] items-end"}`}
       >
         {isBot && (
           <span className="ml-1 text-[10px] font-bold uppercase tracking-widest text-[#80B9B6]">
@@ -178,11 +182,13 @@ function MessageBubble({ msg, shopName }: { msg: Message; shopName: string }) {
         <div
           className={`px-4 py-3 shadow-sm ${
             isBot
-              ? 'rounded-3xl rounded-tl-sm border border-[#80B9B6]/20 bg-white/90 backdrop-blur-md'
-              : 'rounded-3xl rounded-tr-sm bg-gradient-to-br from-[#00736D] to-[#004845] shadow-lg shadow-[#00736D]/25'
+              ? "rounded-3xl rounded-tl-sm border border-[#80B9B6]/20 bg-white/90 backdrop-blur-md"
+              : "rounded-3xl rounded-tr-sm bg-gradient-to-br from-[#00736D] to-[#004845] shadow-lg shadow-[#00736D]/25"
           }`}
         >
-          <p className={`text-sm leading-relaxed ${isBot ? 'text-[#002E2C]' : 'text-white'}`}>
+          <p
+            className={`text-sm leading-relaxed ${isBot ? "text-[#002E2C]" : "text-white"}`}
+          >
             {msg.text}
           </p>
         </div>
@@ -193,8 +199,12 @@ function MessageBubble({ msg, shopName }: { msg: Message; shopName: string }) {
             pickupDate={msg.pickupDate}
           />
         )}
-        <div className={`flex items-center gap-1.5 px-1 ${isBot ? '' : 'flex-row-reverse'}`}>
-          <span className="text-[10px] font-medium text-[#80B9B6]">{msg.time}</span>
+        <div
+          className={`flex items-center gap-1.5 px-1 ${isBot ? "" : "flex-row-reverse"}`}
+        >
+          <span className="text-[10px] font-medium text-[#80B9B6]">
+            {msg.time}
+          </span>
           {!isBot && <CheckCheck className="h-3.5 w-3.5 text-[#80B9B6]" />}
         </div>
       </div>
@@ -206,7 +216,9 @@ function DatePill({ label }: { label: string }) {
   return (
     <div className="my-4 flex items-center justify-center">
       <div className="rounded-full border border-[#80B9B6]/25 bg-[#E6F1F0]/80 px-4 py-1 backdrop-blur-sm">
-        <span className="text-[11px] font-semibold text-[#80B9B6]">{label}</span>
+        <span className="text-[11px] font-semibold text-[#80B9B6]">
+          {label}
+        </span>
       </div>
     </div>
   );
@@ -219,7 +231,7 @@ export default function ChatAssistant() {
   const { accessToken } = useAuth();
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [reservationConfirmed, setReservationConfirmed] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -228,57 +240,54 @@ export default function ChatAssistant() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
 
-  const isOffline = shop?.status === 'offline';
+  const isOffline = shop?.status === "offline";
 
   useEffect(() => {
     if (!shop || initialized.current) return;
     initialized.current = true;
-    setMessages([buildGreeting(shop.name, shop.status === 'offline')]);
+    setMessages([buildGreeting(shop.name, shop.status === "offline")]);
   }, [shop]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typing]);
 
   const toApiHistory = useCallback(
     (msgs: Message[]): ShopChatMessage[] =>
       msgs.map((m) => ({
-        role: m.role === 'user' ? 'user' : 'assistant',
+        role: m.role === "user" ? "user" : "assistant",
         text: m.text,
       })),
     [],
   );
 
-  const runFallbackReply = useCallback(
-    (userText: string) => {
-      const lower = userText.toLowerCase();
-      const hasTime =
-        /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userText) ||
-        lower.includes('1:00') ||
-        lower.includes('pickup') ||
-        lower.includes('today') ||
-        lower.includes('tomorrow');
+  const runFallbackReply = useCallback((userText: string) => {
+    const lower = userText.toLowerCase();
+    const hasTime =
+      /\d{1,2}(:\d{2})?\s*(am|pm)?/i.test(userText) ||
+      lower.includes("1:00") ||
+      lower.includes("pickup") ||
+      lower.includes("today") ||
+      lower.includes("tomorrow");
 
-      if (hasTime) {
-        return {
-          message:
-            'Done! I have reserved your slot and notified the shop owner. Please upload your document below to complete the reservation.',
-          reservationConfirmed: true,
-          pickupTime: '1:00 PM',
-          pickupDate: 'Today',
-        };
-      }
-
+    if (hasTime) {
       return {
         message:
-          'Got it! What time would you like to pick up your document? For example: "1:00 PM today".',
-        reservationConfirmed: false,
-        pickupTime: null,
-        pickupDate: null,
+          "Done! I have reserved your slot and notified the shop owner. Please upload your document below to complete the reservation.",
+        reservationConfirmed: true,
+        pickupTime: "1:00 PM",
+        pickupDate: "Today",
       };
-    },
-    [],
-  );
+    }
+
+    return {
+      message:
+        'Got it! What time would you like to pick up your document? For example: "1:00 PM today".',
+      reservationConfirmed: false,
+      pickupTime: null,
+      pickupDate: null,
+    };
+  }, []);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -286,19 +295,19 @@ export default function ChatAssistant() {
 
     const userMsg: Message = {
       id: newId(),
-      role: 'user',
+      role: "user",
       text,
       time: formatTime(),
     };
 
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
-    setInput('');
+    setInput("");
     setTyping(true);
 
     try {
       if (!accessToken) {
-        throw new ShopChatError('Please sign in to chat', 401, true);
+        throw new ShopChatError("Please sign in to chat", 401, true);
       }
 
       const reply = await sendShopChatMessage(
@@ -319,7 +328,7 @@ export default function ChatAssistant() {
 
       const botMsg: Message = {
         id: newId(),
-        role: 'bot',
+        role: "bot",
         text: reply.message,
         time: formatTime(),
         showCard: reply.reservationConfirmed,
@@ -339,19 +348,20 @@ export default function ChatAssistant() {
 
       if (err instanceof ShopChatError && err.fallback) {
         setUsingFallback(true);
-        toast.message('Using offline demo replies', {
-          description: 'Add GEMINI_API_KEY to Supabase to enable live AI.',
+        toast.message("Using offline demo replies", {
+          description:
+            "Add GROQ_API_KEY to Supabase Edge Functions to enable live AI.",
         });
       } else {
         toast.error(
-          err instanceof Error ? err.message : 'Could not reach assistant',
+          err instanceof Error ? err.message : "Could not reach assistant",
         );
         setUsingFallback(true);
       }
 
       const botMsg: Message = {
         id: newId(),
-        role: 'bot',
+        role: "bot",
         text: fallback.message,
         time: formatTime(),
         showCard: fallback.reservationConfirmed,
@@ -396,11 +406,13 @@ export default function ChatAssistant() {
               whileHover={{ scale: 1.05 }}
               className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-lg shadow-[#00736D]/25"
             >
-              <span className="text-sm font-black text-white">{shop.initials}</span>
+              <span className="text-sm font-black text-white">
+                {shop.initials}
+              </span>
             </motion.div>
             <div
               className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm ${
-                isOffline ? 'bg-rose-500' : 'bg-green-500'
+                isOffline ? "bg-rose-500" : "bg-green-500"
               }`}
             />
           </div>
@@ -413,16 +425,20 @@ export default function ChatAssistant() {
               {isOffline ? (
                 <div className="flex items-center gap-1">
                   <WifiOff className="h-2.5 w-2.5 text-rose-500" />
-                  <span className="text-[10px] font-bold text-rose-500">Offline</span>
+                  <span className="text-[10px] font-bold text-rose-500">
+                    Offline
+                  </span>
                 </div>
               ) : (
-                <span className="text-[10px] font-bold text-green-600">Online</span>
+                <span className="text-[10px] font-bold text-green-600">
+                  Online
+                </span>
               )}
               <span className="text-[10px] text-[#80B9B6]">·</span>
               <div className="flex items-center gap-1">
                 <Sparkles className="h-2.5 w-2.5 text-[#00736D]" />
                 <span className="text-[10px] font-bold text-[#00736D]">
-                  {usingFallback ? 'Demo mode' : 'Gemini Live'}
+                  {usingFallback ? "Demo mode" : "AI Live"}
                 </span>
               </div>
             </div>
@@ -443,7 +459,8 @@ export default function ChatAssistant() {
             <div className="flex items-center gap-2.5 rounded-xl border border-rose-100 bg-rose-50/90 px-3.5 py-2 backdrop-blur-sm">
               <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-rose-400" />
               <p className="text-[11px] font-semibold text-rose-600">
-                Shop is offline. Gemini is handling reservations until the owner returns.
+                Shop is offline. AI is handling reservations until the owner
+                returns.
               </p>
             </div>
           </div>
@@ -470,14 +487,16 @@ export default function ChatAssistant() {
                 whileTap={{ scale: 0.97 }}
                 className={`flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl py-3 text-sm font-bold transition-all ${
                   uploadSuccess
-                    ? 'border-2 border-green-500/50 bg-green-50 text-green-700'
-                    : 'bg-gradient-to-r from-[#00736D] to-[#002E2C] text-white shadow-lg shadow-[#00736D]/30'
+                    ? "border-2 border-green-500/50 bg-green-50 text-green-700"
+                    : "bg-gradient-to-r from-[#00736D] to-[#002E2C] text-white shadow-lg shadow-[#00736D]/30"
                 }`}
               >
                 {uploadSuccess ? (
                   <>
                     <Check className="h-4 w-4" />
-                    <span className="max-w-[200px] truncate">{uploadedFile?.name}</span>
+                    <span className="max-w-[200px] truncate">
+                      {uploadedFile?.name}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -498,7 +517,7 @@ export default function ChatAssistant() {
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/settings')}
+                onClick={() => navigate("/settings")}
                 className="w-full rounded-2xl bg-[#E6F1F0] py-2.5 text-sm font-bold text-[#00736D]"
               >
                 Continue to Print Settings →
@@ -512,15 +531,15 @@ export default function ChatAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void handleSend();
               }
             }}
             placeholder={
               reservationConfirmed
-                ? 'Reservation set — upload your file above'
-                : 'Type your message…'
+                ? "Reservation set — upload your file above"
+                : "Type your message…"
             }
             disabled={typing || reservationConfirmed}
             rows={1}

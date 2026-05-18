@@ -1,27 +1,64 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router";
 import {
-  Upload, MapPin, Clock, Printer, ChevronRight, Zap, LogOut,
-  Bell, CheckCircle2, FileText, Calendar,
-  ChevronLeft, AlertCircle, Star, ChevronDown,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Button } from '../../components/ui/button';
-import { PrintStationsMap } from '../../components/PrintStationsMap';
-import { ShopProfileSheet } from '../../components/ShopProfileSheet';
-import { PRINT_SHOPS, DNSC_CENTER, type PrintShop } from '../../lib/print-shops';
-import { mockLocations, type PrintLocation, calculateDistance } from '../../lib/store';
-import { useAuth } from '../../lib/auth-context';
-import { setPendingPrintFile } from '../../lib/print-session';
+  Upload,
+  MapPin,
+  Clock,
+  Printer,
+  ChevronRight,
+  Zap,
+  LogOut,
+  Bell,
+  CheckCircle2,
+  FileText,
+  Calendar,
+  ChevronLeft,
+  AlertCircle,
+  Star,
+  ChevronDown,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { Button } from "../../components/ui/button";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "../../components/ui/popover";
+import { PrintStationsMap } from "../../components/PrintStationsMap";
+import { ShopProfileSheet } from "../../components/ShopProfileSheet";
+import {
+  PRINT_SHOPS,
+  DNSC_CENTER,
+  type PrintShop,
+} from "../../lib/print-shops";
+import {
+  mockLocations,
+  type PrintLocation,
+  calculateDistance,
+} from "../../lib/store";
+import { useAuth } from "../../lib/auth-context";
+import { setPendingPrintFile } from "../../lib/print-session";
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
-const TIME_SLOTS = ['08:00 AM', '10:30 AM', '01:00 PM', '03:30 PM'];
+const TIME_SLOTS = ["08:00 AM", "10:30 AM", "01:00 PM", "03:30 PM"];
 
 function buildDayStrip(anchor: Date, count = 14) {
   return Array.from({ length: count }, (_, i) => {
@@ -46,12 +83,16 @@ export default function StudentHome() {
 
   /* existing state */
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<PrintLocation | null>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedLocation, setSelectedLocation] =
+    useState<PrintLocation | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [distanceError, setDistanceError] = useState<string | null>(null);
 
   /* new state */
-  const [mode, setMode] = useState<'now' | 'later'>('now');
+  const [mode, setMode] = useState<"now" | "later">("now");
   const [today] = useState(() => new Date());
   const [dayStrip] = useState(() => buildDayStrip(new Date()));
   const [calendarStart, setCalendarStart] = useState(0);
@@ -60,40 +101,84 @@ export default function StudentHome() {
   const [showMap, setShowMap] = useState(true);
   const [profileShop, setProfileShop] = useState<PrintShop | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const [notifications, setNotifications] = useState(
+    () =>
+      [
+        {
+          id: "1",
+          title: "Order ready for pickup",
+          body: "Your order #PF-123 is ready.",
+          time: "10m",
+          read: false,
+        },
+        {
+          id: "2",
+          title: "Shop closed today",
+          body: "The Main Campus shop will be closed.",
+          time: "2h",
+          read: false,
+        },
+      ] as Array<{
+        id: string;
+        title: string;
+        body: string;
+        time: string;
+        read: boolean;
+      }>,
+  );
 
   /* geolocation */
   useEffect(() => {
     const fallback = { lat: DNSC_CENTER.lat, lng: DNSC_CENTER.lng };
-    if (!navigator.geolocation) { setUserLocation(fallback); return; }
+    if (!navigator.geolocation) {
+      setUserLocation(fallback);
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const { latitude: lat, longitude: lng } = coords;
         setUserLocation(
-          typeof lat === 'number' && isFinite(lat) && typeof lng === 'number' && isFinite(lng)
+          typeof lat === "number" &&
+            isFinite(lat) &&
+            typeof lng === "number" &&
+            isFinite(lng)
             ? { lat, lng }
-            : fallback
+            : fallback,
         );
       },
-      () => setUserLocation(fallback)
+      () => setUserLocation(fallback),
     );
   }, []);
 
   /* ── Handlers ── */
-  const handleLogout = async () => { await signOut(); navigate('/login'); };
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login");
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const valid = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    const valid = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
     if (valid.includes(file.type)) setSelectedFile(file);
-    else alert('Please upload a PDF or DOCX file');
+    else alert("Please upload a PDF or DOCX file");
   };
 
   const handleLocationSelect = (loc: PrintLocation) => {
     if (userLocation) {
-      const dist = calculateDistance(userLocation.lat, userLocation.lng, loc.lat, loc.lng);
+      const dist = calculateDistance(
+        userLocation.lat,
+        userLocation.lng,
+        loc.lat,
+        loc.lng,
+      );
       if (dist > 500) {
-        setDistanceError(`Too far (${Math.round(dist)}m). Select a shop within 500m.`);
+        setDistanceError(
+          `Too far (${Math.round(dist)}m). Select a shop within 500m.`,
+        );
         setSelectedLocation(loc);
         return;
       }
@@ -105,57 +190,120 @@ export default function StudentHome() {
   const handleContinue = () => {
     if (!selectedFile || !selectedLocation) return;
     setPendingPrintFile(selectedFile);
-    sessionStorage.setItem('printFile', selectedFile.name);
-    sessionStorage.setItem('printLocation', JSON.stringify(selectedLocation));
-    if (mode === 'later' && selectedSlot) {
-      sessionStorage.setItem('scheduledDate', selectedDate.toISOString());
-      sessionStorage.setItem('scheduledTime', selectedSlot);
+    sessionStorage.setItem("printFile", selectedFile.name);
+    sessionStorage.setItem("printLocation", JSON.stringify(selectedLocation));
+    if (mode === "later" && selectedSlot) {
+      sessionStorage.setItem("scheduledDate", selectedDate.toISOString());
+      sessionStorage.setItem("scheduledTime", selectedSlot);
     }
-    navigate('/settings');
+    navigate("/settings");
   };
 
   const canContinue =
     !!selectedFile &&
     !!selectedLocation &&
     !distanceError &&
-    (mode === 'now' || (mode === 'later' && !!selectedSlot));
+    (mode === "now" || (mode === "later" && !!selectedSlot));
 
   const visibleDays = dayStrip.slice(calendarStart, calendarStart + 7);
 
   /* ── Rendering ── */
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#E6F1F0]/60 via-white to-[#F8FAFA] pb-28">
-
       {/* ── STICKY HEADER ─────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-[#80B9B6]/20 shadow-sm">
         <div className="max-w-lg mx-auto px-4 py-3.5 flex items-center gap-3">
-
           {/* Avatar + text */}
           <div
             className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#00736D] to-[#002E2C] flex items-center justify-center shadow-lg shadow-[#00736D]/25 flex-shrink-0 cursor-pointer"
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate("/profile")}
           >
             <span className="text-white font-black text-lg">
-              {user?.name?.charAt(0).toUpperCase() ?? 'S'}
+              {user?.name?.charAt(0).toUpperCase() ?? "S"}
             </span>
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-[#80B9B6] font-semibold uppercase tracking-widest">Welcome back</p>
+            <p className="text-[11px] text-[#80B9B6] font-semibold uppercase tracking-widest">
+              Welcome back
+            </p>
             <h1 className="text-[#002E2C] font-black text-base leading-tight truncate">
-              {user?.name ?? 'Student'} 👋
+              {user?.name ?? "Student"} 👋
             </h1>
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <motion.button
-              whileTap={{ scale: 0.88 }}
-              className="relative w-9 h-9 rounded-xl bg-[#E6F1F0] hover:bg-[#80B9B6]/30 flex items-center justify-center transition-colors"
-            >
-              <Bell className="w-4 h-4 text-[#00736D]" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
-            </motion.button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  className="relative w-9 h-9 rounded-xl bg-[#E6F1F0] hover:bg-[#80B9B6]/30 flex items-center justify-center transition-colors"
+                >
+                  <Bell className="w-4 h-4 text-[#00736D]" />
+                  {notifications.some((n) => !n.read) && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
+                  )}
+                </motion.button>
+              </PopoverTrigger>
+
+              <PopoverContent>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold">Notifications</h4>
+                  {notifications.length === 0 && (
+                    <p className="text-xs text-gray-500">No notifications</p>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    {notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() =>
+                          setNotifications((prev) =>
+                            prev.map((p) =>
+                              p.id === n.id ? { ...p, read: true } : p,
+                            ),
+                          )
+                        }
+                        className={`text-left p-2 rounded-xl hover:bg-gray-100 flex items-start gap-2 ${n.read ? "opacity-60" : ""}`}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div className="font-semibold text-sm">
+                              {n.title}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {n.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            {n.body}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t" />
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() =>
+                        setNotifications((prev) =>
+                          prev.map((p) => ({ ...p, read: true })),
+                        )
+                      }
+                      className="text-xs text-[#00736D] font-bold"
+                    >
+                      Mark all read
+                    </button>
+                    <button
+                      onClick={() => setNotifications([])}
+                      className="text-xs text-gray-500"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <motion.button
               whileTap={{ scale: 0.88 }}
@@ -170,25 +318,28 @@ export default function StudentHome() {
 
       {/* ── MAIN SCROLL AREA ──────────────────────────────────────── */}
       <div className="max-w-lg mx-auto px-4 space-y-5 pt-5">
-
         {/* ── SEGMENTED CONTROL ─────────────────────────────────── */}
         <div className="bg-[#E6F1F0]/70 p-1.5 rounded-2xl flex gap-1.5">
-          {(['now', 'later'] as const).map((m) => (
+          {(["now", "later"] as const).map((m) => (
             <motion.button
               key={m}
               layout
               onClick={() => setMode(m)}
               className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${
                 mode === m
-                  ? 'bg-gradient-to-r from-[#00736D] to-[#005550] text-white shadow-lg shadow-[#00736D]/30'
-                  : 'text-[#80B9B6] hover:text-[#002E2C]'
+                  ? "bg-gradient-to-r from-[#00736D] to-[#005550] text-white shadow-lg shadow-[#00736D]/30"
+                  : "text-[#80B9B6] hover:text-[#002E2C]"
               }`}
               whileTap={{ scale: 0.97 }}
             >
-              {m === 'now' ? (
-                <><Printer className="w-4 h-4" /> Print Now</>
+              {m === "now" ? (
+                <>
+                  <Printer className="w-4 h-4" /> Print Now
+                </>
               ) : (
-                <><Calendar className="w-4 h-4" /> Schedule for Later</>
+                <>
+                  <Calendar className="w-4 h-4" /> Schedule for Later
+                </>
               )}
             </motion.button>
           ))}
@@ -196,28 +347,32 @@ export default function StudentHome() {
 
         {/* ── SCHEDULE VIEW ─────────────────────────────────────── */}
         <AnimatePresence initial={false}>
-          {mode === 'later' && (
+          {mode === "later" && (
             <motion.div
               key="schedule"
               initial={{ opacity: 0, y: -12, height: 0 }}
-              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
               exit={{ opacity: 0, y: -12, height: 0 }}
-              transition={{ duration: 0.28, ease: 'easeInOut' }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
               className="overflow-hidden"
             >
               <div className="bg-white rounded-3xl shadow-sm border border-[#80B9B6]/15 p-4 space-y-4">
-
                 {/* Month header */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-[#002E2C] font-black text-sm">Select Date</h3>
+                    <h3 className="text-[#002E2C] font-black text-sm">
+                      Select Date
+                    </h3>
                     <p className="text-[#80B9B6] text-xs font-medium mt-0.5">
-                      {MONTH_NAMES[selectedDate.getMonth()]} {selectedDate.getFullYear()}
+                      {MONTH_NAMES[selectedDate.getMonth()]}{" "}
+                      {selectedDate.getFullYear()}
                     </p>
                   </div>
                   <div className="flex gap-1">
                     <button
-                      onClick={() => setCalendarStart(Math.max(0, calendarStart - 7))}
+                      onClick={() =>
+                        setCalendarStart(Math.max(0, calendarStart - 7))
+                      }
                       disabled={calendarStart === 0}
                       className="w-7 h-7 bg-[#E6F1F0] disabled:opacity-30 rounded-xl flex items-center justify-center hover:bg-[#80B9B6]/30 transition-colors"
                     >
@@ -242,19 +397,26 @@ export default function StudentHome() {
                       <motion.button
                         key={date.toISOString()}
                         whileTap={{ scale: 0.88 }}
-                        onClick={() => { setSelectedDate(date); setSelectedSlot(null); }}
+                        onClick={() => {
+                          setSelectedDate(date);
+                          setSelectedSlot(null);
+                        }}
                         className={`flex flex-col items-center py-2.5 rounded-2xl transition-all ${
                           isSelected
-                            ? 'bg-gradient-to-b from-[#00736D] to-[#002E2C] shadow-md shadow-[#00736D]/30'
+                            ? "bg-gradient-to-b from-[#00736D] to-[#002E2C] shadow-md shadow-[#00736D]/30"
                             : isToday
-                            ? 'bg-[#E6F1F0] ring-1 ring-[#00736D]/30'
-                            : 'hover:bg-[#E6F1F0]'
+                              ? "bg-[#E6F1F0] ring-1 ring-[#00736D]/30"
+                              : "hover:bg-[#E6F1F0]"
                         }`}
                       >
-                        <span className={`text-[10px] font-bold uppercase leading-none ${isSelected ? 'text-white/70' : 'text-[#80B9B6]'}`}>
+                        <span
+                          className={`text-[10px] font-bold uppercase leading-none ${isSelected ? "text-white/70" : "text-[#80B9B6]"}`}
+                        >
                           {DAY_NAMES[date.getDay()]}
                         </span>
-                        <span className={`text-sm font-black mt-1 leading-none ${isSelected ? 'text-white' : 'text-[#002E2C]'}`}>
+                        <span
+                          className={`text-sm font-black mt-1 leading-none ${isSelected ? "text-white" : "text-[#002E2C]"}`}
+                        >
                           {date.getDate()}
                         </span>
                         {isToday && !isSelected && (
@@ -268,7 +430,8 @@ export default function StudentHome() {
                 {/* Time Slots */}
                 <div>
                   <p className="text-[#002E2C] text-xs font-black mb-2.5 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-[#00736D]" /> Available Time Slots
+                    <Clock className="w-3.5 h-3.5 text-[#00736D]" /> Available
+                    Time Slots
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {TIME_SLOTS.map((slot) => (
@@ -278,8 +441,8 @@ export default function StudentHome() {
                         onClick={() => setSelectedSlot(slot)}
                         className={`px-4 py-2 rounded-full text-xs font-bold border transition-all ${
                           selectedSlot === slot
-                            ? 'bg-gradient-to-r from-[#00736D] to-[#005550] text-white border-transparent shadow-md shadow-[#00736D]/30'
-                            : 'bg-white border-[#80B9B6]/40 text-[#002E2C] hover:border-[#00736D]/50 hover:bg-[#E6F1F0]'
+                            ? "bg-gradient-to-r from-[#00736D] to-[#005550] text-white border-transparent shadow-md shadow-[#00736D]/30"
+                            : "bg-white border-[#80B9B6]/40 text-[#002E2C] hover:border-[#00736D]/50 hover:bg-[#E6F1F0]"
                         }`}
                       >
                         {slot}
@@ -300,7 +463,13 @@ export default function StudentHome() {
                   >
                     <CheckCircle2 className="w-4 h-4 text-[#00736D] flex-shrink-0" />
                     <p className="text-xs font-semibold text-[#00736D]">
-                      Scheduled for {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {selectedSlot}
+                      Scheduled for{" "}
+                      {selectedDate.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      at {selectedSlot}
                     </p>
                   </motion.div>
                 )}
@@ -317,31 +486,42 @@ export default function StudentHome() {
               whileTap={{ scale: 0.98 }}
               className={`relative rounded-2xl border-2 border-dashed transition-all p-5 flex items-center gap-4 ${
                 selectedFile
-                  ? 'border-[#00736D] bg-[#E6F1F0]/60'
-                  : 'border-[#80B9B6]/50 bg-white hover:border-[#00736D]/50 hover:bg-[#E6F1F0]/30'
+                  ? "border-[#00736D] bg-[#E6F1F0]/60"
+                  : "border-[#80B9B6]/50 bg-white hover:border-[#00736D]/50 hover:bg-[#E6F1F0]/30"
               }`}
             >
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${
-                selectedFile
-                  ? 'bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-lg shadow-[#00736D]/30'
-                  : 'bg-[#E6F1F0]'
-              }`}>
-                {selectedFile
-                  ? <FileText className="w-6 h-6 text-white" />
-                  : <Upload className="w-6 h-6 text-[#80B9B6]" />
-                }
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${
+                  selectedFile
+                    ? "bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-lg shadow-[#00736D]/30"
+                    : "bg-[#E6F1F0]"
+                }`}
+              >
+                {selectedFile ? (
+                  <FileText className="w-6 h-6 text-white" />
+                ) : (
+                  <Upload className="w-6 h-6 text-[#80B9B6]" />
+                )}
               </div>
 
               <div className="flex-1 min-w-0">
                 {selectedFile ? (
                   <>
-                    <p className="text-[#002E2C] font-bold text-sm truncate">{selectedFile.name}</p>
-                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">Tap to change file</p>
+                    <p className="text-[#002E2C] font-bold text-sm truncate">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">
+                      Tap to change file
+                    </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-[#002E2C] font-bold text-sm">Tap to Upload Document</p>
-                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">PDF / DOCX • Max 10 MB</p>
+                    <p className="text-[#002E2C] font-bold text-sm">
+                      Tap to Upload Document
+                    </p>
+                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">
+                      PDF / DOCX • Max 10 MB
+                    </p>
                   </>
                 )}
               </div>
@@ -372,7 +552,7 @@ export default function StudentHome() {
               onClick={() => setShowMap(!showMap)}
               className="text-xs font-semibold text-[#80B9B6] hover:text-[#00736D] transition-colors"
             >
-              {showMap ? 'Hide map' : 'Show map'}
+              {showMap ? "Hide map" : "Show map"}
             </button>
           </div>
 
@@ -386,7 +566,9 @@ export default function StudentHome() {
                 className="flex items-start gap-2.5 p-3 bg-rose-50 border border-rose-200 rounded-2xl"
               >
                 <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-rose-700 font-medium">{distanceError}</p>
+                <p className="text-xs text-rose-700 font-medium">
+                  {distanceError}
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -417,9 +599,11 @@ export default function StudentHome() {
               const loc = mockLocations.find((l) => l.id === shop.id)!;
               const isSelected = selectedLocation?.id === shop.id;
               const etaColor =
-                shop.waitTime <= 5 ? 'text-green-700 bg-green-50'
-                : shop.waitTime <= 10 ? 'text-amber-700 bg-amber-50'
-                : 'text-orange-700 bg-orange-50';
+                shop.waitTime <= 5
+                  ? "text-green-700 bg-green-50"
+                  : shop.waitTime <= 10
+                    ? "text-amber-700 bg-amber-50"
+                    : "text-orange-700 bg-orange-50";
               return (
                 <motion.div
                   key={shop.id}
@@ -428,8 +612,8 @@ export default function StudentHome() {
                   transition={{ delay: i * 0.06 }}
                   className={`overflow-hidden rounded-2xl border-2 transition-all ${
                     isSelected
-                      ? 'border-[#00736D] bg-gradient-to-r from-[#E6F1F0] to-white shadow-md shadow-[#00736D]/10'
-                      : 'border-[#80B9B6]/20 bg-white hover:border-[#00736D]/30 hover:shadow-sm'
+                      ? "border-[#00736D] bg-gradient-to-r from-[#E6F1F0] to-white shadow-md shadow-[#00736D]/10"
+                      : "border-[#80B9B6]/20 bg-white hover:border-[#00736D]/30 hover:shadow-sm"
                   }`}
                 >
                   <button
@@ -437,42 +621,56 @@ export default function StudentHome() {
                     onClick={() => handleLocationSelect(loc)}
                     className="flex w-full items-center gap-3 p-3.5 text-left active:scale-[0.99]"
                   >
-                  {/* Icon */}
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                    isSelected
-                      ? 'bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-md'
-                      : 'bg-[#E6F1F0]'
-                  }`}>
-                    <Printer className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-[#00736D]'}`} />
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="truncate text-sm font-bold text-[#002E2C]">{shop.name}</p>
-                      {shop.isFlagship && (
-                        <Star className="h-3 w-3 shrink-0 fill-[#00736D] text-[#00736D]" />
-                      )}
+                    {/* Icon */}
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
+                        isSelected
+                          ? "bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-md"
+                          : "bg-[#E6F1F0]"
+                      }`}
+                    >
+                      <Printer
+                        className={`w-5 h-5 ${isSelected ? "text-white" : "text-[#00736D]"}`}
+                      />
                     </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${etaColor}`}>
-                        {shop.waitTime} min ETA
-                      </span>
-                      {shop.waitTime <= 5 && (
-                        <span className="text-[10px] font-semibold text-green-600 flex items-center gap-0.5">
-                          <Zap className="w-2.5 h-2.5" /> Fast
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate text-sm font-bold text-[#002E2C]">
+                          {shop.name}
+                        </p>
+                        {shop.isFlagship && (
+                          <Star className="h-3 w-3 shrink-0 fill-[#00736D] text-[#00736D]" />
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${etaColor}`}
+                        >
+                          {shop.waitTime} min ETA
                         </span>
+                        {shop.waitTime <= 5 && (
+                          <span className="text-[10px] font-semibold text-green-600 flex items-center gap-0.5">
+                            <Zap className="w-2.5 h-2.5" /> Fast
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status dot + check */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          shop.status === "online"
+                            ? "bg-green-500 shadow-sm shadow-green-500/60"
+                            : "bg-rose-400"
+                        }`}
+                      />
+                      {isSelected && (
+                        <CheckCircle2 className="w-5 h-5 text-[#00736D]" />
                       )}
                     </div>
-                  </div>
-
-                  {/* Status dot + check */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className={`w-2 h-2 rounded-full ${
-                      shop.status === 'online' ? 'bg-green-500 shadow-sm shadow-green-500/60' : 'bg-rose-400'
-                    }`} />
-                    {isSelected && <CheckCircle2 className="w-5 h-5 text-[#00736D]" />}
-                  </div>
                   </button>
                   <div className="border-t border-[#80B9B6]/15 px-3 pb-3">
                     <motion.button
@@ -491,10 +689,13 @@ export default function StudentHome() {
             })}
           </div>
         </div>
+      </div>
+      {/* end scroll area */}
 
-      </div>{/* end scroll area */}
-
-      <ShopProfileSheet shop={profileShop} onClose={() => setProfileShop(null)} />
+      <ShopProfileSheet
+        shop={profileShop}
+        onClose={() => setProfileShop(null)}
+      />
 
       {/* ── STICKY BOTTOM CTA ─────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[#80B9B6]/20 px-4 py-4 shadow-2xl shadow-black/10">
@@ -505,8 +706,8 @@ export default function StudentHome() {
             disabled={!canContinue}
             className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-black text-base transition-all ${
               canContinue
-                ? 'bg-gradient-to-r from-[#00736D] via-[#008A83] to-[#002E2C] text-white shadow-lg shadow-[#00736D]/30 hover:shadow-xl hover:shadow-[#00736D]/40'
-                : 'bg-[#E6F1F0] text-[#80B9B6] cursor-not-allowed'
+                ? "bg-gradient-to-r from-[#00736D] via-[#008A83] to-[#002E2C] text-white shadow-lg shadow-[#00736D]/30 hover:shadow-xl hover:shadow-[#00736D]/40"
+                : "bg-[#E6F1F0] text-[#80B9B6] cursor-not-allowed"
             }`}
           >
             <span>Continue to Print Settings</span>
@@ -517,17 +718,16 @@ export default function StudentHome() {
           {!canContinue && (
             <p className="text-center text-[11px] text-[#80B9B6] font-medium mt-2">
               {!selectedFile
-                ? 'Upload a document to get started'
+                ? "Upload a document to get started"
                 : !selectedLocation
-                ? 'Select a partner shop'
-                : mode === 'later' && !selectedSlot
-                ? 'Choose a time slot'
-                : 'Fix the distance error above'}
+                  ? "Select a partner shop"
+                  : mode === "later" && !selectedSlot
+                    ? "Choose a time slot"
+                    : "Fix the distance error above"}
             </p>
           )}
         </div>
       </div>
-
     </div>
   );
 }
