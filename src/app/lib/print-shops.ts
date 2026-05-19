@@ -1,110 +1,124 @@
-import { createClient } from "@supabase/supabase-js";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+/**
+ * Local dummy dataset for PrintFlow partner print shops.
+ * Flagship: PrintFlow Hub @ DNSC (Davao del Norte State College).
+ */
 
 export const DNSC_CENTER = { lat: 7.3015, lng: 125.6833 } as const;
 
-export type AppRole = "student" | "vendor" | "superadmin";
-export type ShopApprovalStatus = "pending" | "verified" | "suspended";
-export type ShopTier = "standard" | "premium";
-
 export interface PrintShop {
   id: string;
-  ownerId?: string;
   slug: string;
   name: string;
   initials: string;
   address: string;
   description: string;
   waitTime: number;
-  status: "online" | "offline";
-  approvalStatus: ShopApprovalStatus;
+  status: 'online' | 'offline';
   lat: number;
   lng: number;
   isFlagship?: boolean;
   hours: string;
   services: string[];
-  tier: ShopTier;
-  email?: string;
-  phone?: string;
 }
 
-export interface PrintShopRecord {
-  id: string;
-  owner_id: string | null;
-  shop_name: string;
-  slug: string;
-  description: string | null;
-  address: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  wait_time: number | null;
-  online: boolean | null;
-  status: ShopApprovalStatus | null;
-  tier: ShopTier | null;
-  hours: string | null;
-  services: string[] | null;
-  email: string | null;
-  phone: string | null;
-  created_at: string | null;
-}
-
-const supabaseUrl = `https://${projectId}.supabase.co`;
-const publicClient = createClient(supabaseUrl, publicAnonKey);
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-}
-
-function toInitials(name: string) {
-  const parts = name
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 2);
-
-  if (parts.length === 0) {
-    return "PF";
-  }
-
-  return parts.map((part) => part[0]?.toUpperCase() ?? "P").join("");
-}
-
-export function normalizePrintShop(record: PrintShopRecord): PrintShop {
-  const name = record.shop_name.trim();
-  const latitude = Number(record.latitude ?? DNSC_CENTER.lat);
-  const longitude = Number(record.longitude ?? DNSC_CENTER.lng);
-  const waitTime = Number(record.wait_time ?? 15);
-  const approvalStatus = record.status ?? "pending";
-  const tier = record.tier ?? "standard";
-  const online = Boolean(record.online) && approvalStatus === "verified";
-
-  return {
-    id: record.id,
-    ownerId: record.owner_id ?? undefined,
-    slug: record.slug || slugify(name),
-    name,
-    initials: toInitials(name),
-    address: record.address ?? "Address pending",
+export const PRINT_SHOPS: PrintShop[] = [
+  {
+    id: 'printflow-hub-dnsc',
+    slug: 'printflow-hub-dnsc',
+    name: 'PrintFlow Hub @ DNSC',
+    initials: 'PF',
+    address: 'Davao del Norte State College, New Visayas, Panabo City',
     description:
-      record.description ?? "Verified print partner on the PrintFlow network.",
-    waitTime,
-    status: online ? "online" : "offline",
-    approvalStatus,
-    lat: Number.isFinite(latitude) ? latitude : DNSC_CENTER.lat,
-    lng: Number.isFinite(longitude) ? longitude : DNSC_CENTER.lng,
-    hours: record.hours ?? "Hours pending",
-    services: record.services ?? [],
-    tier,
-    email: record.email ?? undefined,
-    phone: record.phone ?? undefined,
-  };
+      'Official PrintFlow flagship station on campus. Color & B&W printing, binding, and same-day thesis support.',
+    waitTime: 3,
+    status: 'online',
+    lat: DNSC_CENTER.lat,
+    lng: DNSC_CENTER.lng,
+    isFlagship: true,
+    hours: 'Mon–Sat · 7:00 AM – 6:00 PM',
+    services: ['B&W Print', 'Color Print', 'Binding', 'Scan to PDF'],
+  },
+  {
+    id: 'ink-masters',
+    slug: 'ink-masters',
+    name: 'Ink Masters Print Shop',
+    initials: 'IM',
+    address: 'Gate 2, DNSC Perimeter Road',
+    description: 'Fast turnaround for assignments and lab reports near the main gate.',
+    waitTime: 5,
+    status: 'offline',
+    lat: 7.3022,
+    lng: 125.6841,
+    hours: 'Mon–Fri · 8:00 AM – 5:00 PM',
+    services: ['B&W Print', 'Color Print'],
+  },
+  {
+    id: 'quickprint-solutions',
+    slug: 'quickprint-solutions',
+    name: 'QuickPrint Solutions',
+    initials: 'QP',
+    address: 'Brgy. New Visayas, Panabo City',
+    description: 'Budget-friendly bulk printing for student organizations.',
+    waitTime: 12,
+    status: 'online',
+    lat: 7.3008,
+    lng: 125.6818,
+    hours: 'Daily · 8:00 AM – 7:00 PM',
+    services: ['B&W Print', 'Lamination'],
+  },
+  {
+    id: 'gigaprint-partners',
+    slug: 'gigaprint-partners',
+    name: 'GigaPrint Partners',
+    initials: 'GP',
+    address: 'College Avenue, Panabo City',
+    description: 'Large-format posters and presentation materials.',
+    waitTime: 8,
+    status: 'online',
+    lat: 7.2998,
+    lng: 125.6825,
+    hours: 'Mon–Sat · 9:00 AM – 6:00 PM',
+    services: ['Color Print', 'Poster Print', 'Lamination'],
+  },
+  {
+    id: 'campus-edge',
+    slug: 'campus-edge',
+    name: 'Campus Edge Printing',
+    initials: 'CE',
+    address: 'Near DNSC Library Complex',
+    description: 'Quiet zone pickup — ideal for research papers and portfolios.',
+    waitTime: 15,
+    status: 'online',
+    lat: 7.3012,
+    lng: 125.6848,
+    hours: 'Mon–Fri · 8:30 AM – 4:30 PM',
+    services: ['B&W Print', 'Binding', 'Scan to PDF'],
+  },
+  {
+    id: 'panabo-express',
+    slug: 'panabo-express',
+    name: 'Panabo Express Prints',
+    initials: 'PE',
+    address: 'National Highway, Panabo City',
+    description: 'Off-campus partner with extended evening hours.',
+    waitTime: 10,
+    status: 'online',
+    lat: 7.2985,
+    lng: 125.6790,
+    hours: 'Daily · 7:00 AM – 9:00 PM',
+    services: ['B&W Print', 'Color Print', 'Photocopy'],
+  },
+];
+
+export function getShopById(id: string): PrintShop | undefined {
+  return PRINT_SHOPS.find((s) => s.id === id || s.slug === id);
 }
 
+export function getShopBySlug(slug: string): PrintShop | undefined {
+  return PRINT_SHOPS.find((s) => s.slug === slug);
+}
+
+/** Map / list compatibility with legacy PrintLocation shape */
 export function toPrintLocation(shop: PrintShop) {
   return {
     id: shop.id,
@@ -116,93 +130,4 @@ export function toPrintLocation(shop: PrintShop) {
   };
 }
 
-export function buildShopSlug(shopName: string) {
-  return slugify(shopName);
-}
-
-export async function fetchPublicPrintShops() {
-  try {
-    const { data, error } = await publicClient
-      .from("print_shops")
-      .select(
-        "id, owner_id, shop_name, slug, description, address, latitude, longitude, wait_time, online, status, tier, hours, services, email, phone, created_at",
-      )
-      .eq("status", "verified")
-      .eq("online", true)
-      .order("tier", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error || !data) {
-      console.error("fetchPublicPrintShops failed:", {
-        message: error?.message,
-        details: error?.details,
-      });
-      return [] as PrintShop[];
-    }
-
-    return data.map((record) => normalizePrintShop(record as PrintShopRecord));
-  } catch (error) {
-    console.error("fetchPublicPrintShops threw:", {
-      message: error instanceof Error ? error.message : String(error),
-      details:
-        error instanceof Error
-          ? (error as Error & { details?: string }).details
-          : undefined,
-    });
-    return [] as PrintShop[];
-  }
-}
-
-export async function fetchPublicPrintShopBySlug(slug: string) {
-  if (!slug.trim()) {
-    return undefined;
-  }
-
-  const { data, error } = await publicClient
-    .from("print_shops")
-    .select(
-      "id, owner_id, shop_name, slug, description, address, latitude, longitude, wait_time, online, status, tier, hours, services, email, phone, created_at",
-    )
-    .eq("slug", slug)
-    .eq("status", "verified")
-    .eq("online", true)
-    .maybeSingle();
-
-  if (error || !data) {
-    return undefined;
-  }
-
-  return normalizePrintShop(data as PrintShopRecord);
-}
-
-export async function fetchMyPrintShop(accessToken: string) {
-  const client = createClient(supabaseUrl, publicAnonKey, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  });
-
-  const {
-    data: { user },
-  } = await client.auth.getUser(accessToken);
-
-  if (!user) {
-    return undefined;
-  }
-
-  const { data, error } = await client
-    .from("print_shops")
-    .select(
-      "id, owner_id, shop_name, slug, description, address, latitude, longitude, wait_time, online, status, tier, hours, services, email, phone, created_at",
-    )
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  if (error || !data) {
-    return undefined;
-  }
-
-  return normalizePrintShop(data as PrintShopRecord);
-}
+export const printShopLocations = PRINT_SHOPS.map(toPrintLocation);

@@ -1,94 +1,148 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import {
-  AlertCircle,
-  ChevronRight,
-  FileText,
-  LogOut,
-  MapPin,
-  MessageCircle,
-  Printer,
-  Sparkles,
   Upload,
+  MapPin,
+  Clock,
+  Printer,
+  ChevronRight,
+  Zap,
+  LogOut,
+  Bell,
+  CheckCircle2,
+  FileText,
+  Calendar,
+  ChevronLeft,
+  AlertCircle,
+  Star,
+  ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "../../components/ui/popover";
 import { PrintStationsMap } from "../../components/PrintStationsMap";
 import { ShopProfileSheet } from "../../components/ShopProfileSheet";
 import {
+  PRINT_SHOPS,
   DNSC_CENTER,
-  fetchPublicPrintShops,
   type PrintShop,
 } from "../../lib/print-shops";
-import { calculateDistance } from "../../lib/store";
+import {
+  mockLocations,
+  type PrintLocation,
+  calculateDistance,
+} from "../../lib/store";
 import { useAuth } from "../../lib/auth-context";
 import { setPendingPrintFile } from "../../lib/print-session";
 
+/* ─── Helpers ─────────────────────────────────────────────────────── */
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const TIME_SLOTS = ["08:00 AM", "10:30 AM", "01:00 PM", "03:30 PM"];
+
+function buildDayStrip(anchor: Date, count = 14) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(anchor);
+    d.setDate(anchor.getDate() + i);
+    return d;
+  });
+}
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/* ─── Component ───────────────────────────────────────────────────── */
 export default function StudentHome() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
 
+  /* existing state */
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<PrintShop | null>(
-    null,
-  );
-  const [shops, setShops] = useState<PrintShop[]>([]);
-  const [shopsLoading, setShopsLoading] = useState(true);
+  const [selectedLocation, setSelectedLocation] =
+    useState<PrintLocation | null>(null);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
   const [distanceError, setDistanceError] = useState<string | null>(null);
+
+  /* new state */
+  const [mode, setMode] = useState<"now" | "later">("now");
+  const [today] = useState(() => new Date());
+  const [dayStrip] = useState(() => buildDayStrip(new Date()));
+  const [calendarStart, setCalendarStart] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
   const [profileShop, setProfileShop] = useState<PrintShop | null>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [notifications, setNotifications] = useState(
+    () =>
+      [
+        {
+          id: "1",
+          title: "Order ready for pickup",
+          body: "Your order #PF-123 is ready.",
+          time: "10m",
+          read: false,
+        },
+        {
+          id: "2",
+          title: "Shop closed today",
+          body: "The Main Campus shop will be closed.",
+          time: "2h",
+          read: false,
+        },
+      ] as Array<{
+        id: string;
+        title: string;
+        body: string;
+        time: string;
+        read: boolean;
+      }>,
+  );
 
-  useEffect(() => {
-    let active = true;
-    setShopsLoading(true);
-
-    void fetchPublicPrintShops()
-      .then((records) => {
-        if (!active) {
-          return;
-        }
-
-        setShops(records);
-        setSelectedLocation((current) => current ?? records[0] ?? null);
-      })
-      .catch(() => {
-        if (active) {
-          toast.error("Could not load partner shops");
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setShopsLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
+  /* geolocation */
   useEffect(() => {
     const fallback = { lat: DNSC_CENTER.lat, lng: DNSC_CENTER.lng };
-
     if (!navigator.geolocation) {
       setUserLocation(fallback);
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        const { latitude, longitude } = coords;
+        const { latitude: lat, longitude: lng } = coords;
         setUserLocation(
-          Number.isFinite(latitude) && Number.isFinite(longitude)
-            ? { lat: latitude, lng: longitude }
+          typeof lat === "number" &&
+            isFinite(lat) &&
+            typeof lng === "number" &&
+            isFinite(lng)
+            ? { lat, lng }
             : fallback,
         );
       },
@@ -96,261 +150,498 @@ export default function StudentHome() {
     );
   }, []);
 
+  /* ── Handlers ── */
   const handleLogout = async () => {
     await signOut();
     navigate("/login");
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    const allowedTypes = [
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const valid = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
-
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("Please upload a PDF or DOCX file");
-      return;
-    }
-
-    setSelectedFile(file);
+    if (valid.includes(file.type)) setSelectedFile(file);
+    else alert("Please upload a PDF or DOCX file");
   };
 
-  const handleLocationSelect = (shop: PrintShop) => {
+  const handleLocationSelect = (loc: PrintLocation) => {
     if (userLocation) {
-      const distance = calculateDistance(
+      const dist = calculateDistance(
         userLocation.lat,
         userLocation.lng,
-        shop.lat,
-        shop.lng,
+        loc.lat,
+        loc.lng,
       );
-
-      if (distance > 500) {
+      if (dist > 500) {
         setDistanceError(
-          `Too far (${Math.round(distance)}m). Select a shop within 500m.`,
+          `Too far (${Math.round(dist)}m). Select a shop within 500m.`,
         );
-        setSelectedLocation(shop);
+        setSelectedLocation(loc);
         return;
       }
     }
-
     setDistanceError(null);
-    setSelectedLocation(shop);
+    setSelectedLocation(loc);
   };
 
   const handleContinue = () => {
-    if (!selectedFile || !selectedLocation) {
-      return;
-    }
-
+    if (!selectedFile || !selectedLocation) return;
     setPendingPrintFile(selectedFile);
     sessionStorage.setItem("printFile", selectedFile.name);
     sessionStorage.setItem("printLocation", JSON.stringify(selectedLocation));
+    if (mode === "later" && selectedSlot) {
+      sessionStorage.setItem("scheduledDate", selectedDate.toISOString());
+      sessionStorage.setItem("scheduledTime", selectedSlot);
+    }
     navigate("/settings");
   };
 
-  const premiumChatShop = useMemo(
-    () => (selectedLocation?.tier === "premium" ? selectedLocation : null),
-    [selectedLocation],
-  );
+  const canContinue =
+    !!selectedFile &&
+    !!selectedLocation &&
+    !distanceError &&
+    (mode === "now" || (mode === "later" && !!selectedSlot));
 
-  const canContinue = Boolean(
-    selectedFile && selectedLocation && !distanceError,
-  );
+  const visibleDays = dayStrip.slice(calendarStart, calendarStart + 7);
 
+  /* ── Rendering ── */
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#E6F1F0]/60 via-white to-[#F8FAFA] pb-28">
-      <div className="sticky top-0 z-40 border-b border-[#80B9B6]/20 bg-white/80 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3.5">
-          <button
-            type="button"
+      {/* ── STICKY HEADER ─────────────────────────────────────────── */}
+      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-[#80B9B6]/20 shadow-sm">
+        <div className="max-w-lg mx-auto px-4 py-3.5 flex items-center gap-3">
+          {/* Avatar + text */}
+          <div
+            className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#00736D] to-[#002E2C] flex items-center justify-center shadow-lg shadow-[#00736D]/25 flex-shrink-0 cursor-pointer"
             onClick={() => navigate("/profile")}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-lg shadow-[#00736D]/25"
           >
-            <span className="text-lg font-black text-white">
+            <span className="text-white font-black text-lg">
               {user?.name?.charAt(0).toUpperCase() ?? "S"}
             </span>
-          </button>
+          </div>
 
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-[#80B9B6]">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-[#80B9B6] font-semibold uppercase tracking-widest">
               Welcome back
             </p>
-            <h1 className="truncate text-base font-black leading-tight text-[#002E2C]">
-              {user?.name ?? "Student"}
+            <h1 className="text-[#002E2C] font-black text-base leading-tight truncate">
+              {user?.name ?? "Student"} 👋
             </h1>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => navigate("/shop")}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E6F1F0]"
-            >
-              <MessageCircle className="h-4 w-4 text-[#00736D]" />
-            </button>
-            <button
-              type="button"
+          {/* Actions */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Popover>
+              <PopoverTrigger asChild>
+                <motion.button
+                  whileTap={{ scale: 0.88 }}
+                  className="relative w-9 h-9 rounded-xl bg-[#E6F1F0] hover:bg-[#80B9B6]/30 flex items-center justify-center transition-colors"
+                >
+                  <Bell className="w-4 h-4 text-[#00736D]" />
+                  {notifications.some((n) => !n.read) && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
+                  )}
+                </motion.button>
+              </PopoverTrigger>
+
+              <PopoverContent>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold">Notifications</h4>
+                  {notifications.length === 0 && (
+                    <p className="text-xs text-gray-500">No notifications</p>
+                  )}
+                  <div className="flex flex-col gap-2">
+                    {notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() =>
+                          setNotifications((prev) =>
+                            prev.map((p) =>
+                              p.id === n.id ? { ...p, read: true } : p,
+                            ),
+                          )
+                        }
+                        className={`text-left p-2 rounded-xl hover:bg-gray-100 flex items-start gap-2 ${n.read ? "opacity-60" : ""}`}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div className="font-semibold text-sm">
+                              {n.title}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {n.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            {n.body}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t" />
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() =>
+                        setNotifications((prev) =>
+                          prev.map((p) => ({ ...p, read: true })),
+                        )
+                      }
+                      className="text-xs text-[#00736D] font-bold"
+                    >
+                      Mark all read
+                    </button>
+                    <button
+                      onClick={() => setNotifications([])}
+                      className="text-xs text-gray-500"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <motion.button
+              whileTap={{ scale: 0.88 }}
               onClick={handleLogout}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E6F1F0]"
+              className="w-9 h-9 rounded-xl bg-[#E6F1F0] hover:bg-red-50 flex items-center justify-center transition-colors"
             >
-              <LogOut className="h-4 w-4 text-[#80B9B6]" />
-            </button>
+              <LogOut className="w-4 h-4 text-[#80B9B6] hover:text-red-500" />
+            </motion.button>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-lg space-y-5 px-4 pt-5">
-        <Card className="overflow-hidden border-[#80B9B6]/20 bg-[#002E2C] p-5 text-white shadow-xl shadow-[#002E2C]/20">
-          <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-              <Sparkles className="h-5 w-5 text-[#80B9B6]" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#80B9B6]">
-                Print Now
-              </p>
-              <h2 className="mt-1 text-lg font-black">
-                Immediate local printing
-              </h2>
-              <p className="mt-2 text-sm text-white/75">
-                Upload your file, pick a verified online partner, then jump into
-                Groq-powered chat when you need a premium reservation.
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="border-dashed border-[#80B9B6]/30 bg-white/90 p-5 shadow-sm">
-          <label htmlFor="file-upload" className="block cursor-pointer">
-            <div
-              className={`flex items-center gap-4 rounded-2xl border-2 border-dashed p-4 transition-all ${selectedFile ? "border-[#00736D] bg-[#E6F1F0]/60" : "border-[#80B9B6]/40 bg-white hover:border-[#00736D]/50"}`}
+      {/* ── MAIN SCROLL AREA ──────────────────────────────────────── */}
+      <div className="max-w-lg mx-auto px-4 space-y-5 pt-5">
+        {/* ── SEGMENTED CONTROL ─────────────────────────────────── */}
+        <div className="bg-[#E6F1F0]/70 p-1.5 rounded-2xl flex gap-1.5">
+          {(["now", "later"] as const).map((m) => (
+            <motion.button
+              key={m}
+              layout
+              onClick={() => setMode(m)}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${
+                mode === m
+                  ? "bg-gradient-to-r from-[#00736D] to-[#005550] text-white shadow-lg shadow-[#00736D]/30"
+                  : "text-[#80B9B6] hover:text-[#002E2C]"
+              }`}
+              whileTap={{ scale: 0.97 }}
             >
-              <div
-                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${selectedFile ? "bg-gradient-to-br from-[#00736D] to-[#002E2C]" : "bg-[#E6F1F0]"}`}
-              >
-                {selectedFile ? (
-                  <FileText className="h-6 w-6 text-white" />
-                ) : (
-                  <Upload className="h-6 w-6 text-[#80B9B6]" />
+              {m === "now" ? (
+                <>
+                  <Printer className="w-4 h-4" /> Print Now
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4" /> Schedule for Later
+                </>
+              )}
+            </motion.button>
+          ))}
+        </div>
+
+        {/* ── SCHEDULE VIEW ─────────────────────────────────────── */}
+        <AnimatePresence initial={false}>
+          {mode === "later" && (
+            <motion.div
+              key="schedule"
+              initial={{ opacity: 0, y: -12, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -12, height: 0 }}
+              transition={{ duration: 0.28, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className="bg-white rounded-3xl shadow-sm border border-[#80B9B6]/15 p-4 space-y-4">
+                {/* Month header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[#002E2C] font-black text-sm">
+                      Select Date
+                    </h3>
+                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">
+                      {MONTH_NAMES[selectedDate.getMonth()]}{" "}
+                      {selectedDate.getFullYear()}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() =>
+                        setCalendarStart(Math.max(0, calendarStart - 7))
+                      }
+                      disabled={calendarStart === 0}
+                      className="w-7 h-7 bg-[#E6F1F0] disabled:opacity-30 rounded-xl flex items-center justify-center hover:bg-[#80B9B6]/30 transition-colors"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 text-[#00736D]" />
+                    </button>
+                    <button
+                      onClick={() => setCalendarStart(calendarStart + 7)}
+                      disabled={calendarStart + 7 >= dayStrip.length}
+                      className="w-7 h-7 bg-[#E6F1F0] disabled:opacity-30 rounded-xl flex items-center justify-center hover:bg-[#80B9B6]/30 transition-colors"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-[#00736D]" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Day strip */}
+                <div className="grid grid-cols-7 gap-1" ref={stripRef}>
+                  {visibleDays.map((date) => {
+                    const isToday = isSameDay(date, today);
+                    const isSelected = isSameDay(date, selectedDate);
+                    return (
+                      <motion.button
+                        key={date.toISOString()}
+                        whileTap={{ scale: 0.88 }}
+                        onClick={() => {
+                          setSelectedDate(date);
+                          setSelectedSlot(null);
+                        }}
+                        className={`flex flex-col items-center py-2.5 rounded-2xl transition-all ${
+                          isSelected
+                            ? "bg-gradient-to-b from-[#00736D] to-[#002E2C] shadow-md shadow-[#00736D]/30"
+                            : isToday
+                              ? "bg-[#E6F1F0] ring-1 ring-[#00736D]/30"
+                              : "hover:bg-[#E6F1F0]"
+                        }`}
+                      >
+                        <span
+                          className={`text-[10px] font-bold uppercase leading-none ${isSelected ? "text-white/70" : "text-[#80B9B6]"}`}
+                        >
+                          {DAY_NAMES[date.getDay()]}
+                        </span>
+                        <span
+                          className={`text-sm font-black mt-1 leading-none ${isSelected ? "text-white" : "text-[#002E2C]"}`}
+                        >
+                          {date.getDate()}
+                        </span>
+                        {isToday && !isSelected && (
+                          <div className="w-1 h-1 bg-[#00736D] rounded-full mt-1" />
+                        )}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+
+                {/* Time Slots */}
+                <div>
+                  <p className="text-[#002E2C] text-xs font-black mb-2.5 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#00736D]" /> Available
+                    Time Slots
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {TIME_SLOTS.map((slot) => (
+                      <motion.button
+                        key={slot}
+                        whileTap={{ scale: 0.93 }}
+                        onClick={() => setSelectedSlot(slot)}
+                        className={`px-4 py-2 rounded-full text-xs font-bold border transition-all ${
+                          selectedSlot === slot
+                            ? "bg-gradient-to-r from-[#00736D] to-[#005550] text-white border-transparent shadow-md shadow-[#00736D]/30"
+                            : "bg-white border-[#80B9B6]/40 text-[#002E2C] hover:border-[#00736D]/50 hover:bg-[#E6F1F0]"
+                        }`}
+                      >
+                        {slot}
+                        {selectedSlot === slot && (
+                          <CheckCircle2 className="inline w-3 h-3 ml-1.5 -mt-0.5" />
+                        )}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Confirmation hint */}
+                {selectedSlot && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-2 px-3 py-2.5 bg-[#E6F1F0] rounded-xl"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-[#00736D] flex-shrink-0" />
+                    <p className="text-xs font-semibold text-[#00736D]">
+                      Scheduled for{" "}
+                      {selectedDate.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      at {selectedSlot}
+                    </p>
+                  </motion.div>
                 )}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-[#002E2C]">
-                  {selectedFile ? selectedFile.name : "Tap to upload document"}
-                </p>
-                <p className="mt-0.5 text-xs text-[#80B9B6]">
-                  PDF or DOCX only
-                </p>
-              </div>
-            </div>
-            <input
-              id="file-upload"
-              type="file"
-              accept=".pdf,.docx"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-          </label>
-        </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
+        {/* ── UPLOAD CARD ───────────────────────────────────────── */}
+        <div>
+          <label htmlFor="file-upload" className="block cursor-pointer">
+            <motion.div
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              className={`relative rounded-2xl border-2 border-dashed transition-all p-5 flex items-center gap-4 ${
+                selectedFile
+                  ? "border-[#00736D] bg-[#E6F1F0]/60"
+                  : "border-[#80B9B6]/50 bg-white hover:border-[#00736D]/50 hover:bg-[#E6F1F0]/30"
+              }`}
+            >
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${
+                  selectedFile
+                    ? "bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-lg shadow-[#00736D]/30"
+                    : "bg-[#E6F1F0]"
+                }`}
+              >
+                {selectedFile ? (
+                  <FileText className="w-6 h-6 text-white" />
+                ) : (
+                  <Upload className="w-6 h-6 text-[#80B9B6]" />
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                {selectedFile ? (
+                  <>
+                    <p className="text-[#002E2C] font-bold text-sm truncate">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">
+                      Tap to change file
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[#002E2C] font-bold text-sm">
+                      Tap to Upload Document
+                    </p>
+                    <p className="text-[#80B9B6] text-xs font-medium mt-0.5">
+                      PDF / DOCX • Max 10 MB
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {selectedFile && (
+                <CheckCircle2 className="w-5 h-5 text-[#00736D] flex-shrink-0" />
+              )}
+
+              <input
+                id="file-upload"
+                type="file"
+                accept=".pdf,.docx"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </motion.div>
+          </label>
+        </div>
+
+        {/* ── MAP CARD ──────────────────────────────────────────── */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-black text-[#002E2C]">
-              <MapPin className="h-4 w-4 text-[#00736D]" />
-              Verified online shops
+            <h3 className="text-[#002E2C] font-black text-sm flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#00736D]" />
+              Partner Shops Near You
             </h3>
             <button
-              type="button"
-              onClick={() => setShowMap((value) => !value)}
-              className="text-xs font-semibold text-[#80B9B6]"
+              onClick={() => setShowMap(!showMap)}
+              className="text-xs font-semibold text-[#80B9B6] hover:text-[#00736D] transition-colors"
             >
               {showMap ? "Hide map" : "Show map"}
             </button>
           </div>
 
+          {/* Distance error */}
           <AnimatePresence>
             {distanceError && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                className="flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 p-3"
+                exit={{ opacity: 0 }}
+                className="flex items-start gap-2.5 p-3 bg-rose-50 border border-rose-200 rounded-2xl"
               >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-                <p className="text-xs font-medium text-rose-700">
+                <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-rose-700 font-medium">
                   {distanceError}
                 </p>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {showMap && (
-            <Card className="overflow-hidden border-[#80B9B6]/15 bg-white/95 shadow-md">
-              {shopsLoading ? (
-                <div className="flex h-[420px] items-center justify-center text-sm text-[#80B9B6]">
-                  Loading verified shops...
-                </div>
-              ) : shops.length === 0 ? (
-                <div className="flex h-[420px] items-center justify-center px-6 text-center text-sm text-[#80B9B6]">
-                  No verified online shops are available yet.
-                </div>
-              ) : (
+          {/* Map */}
+          <AnimatePresence initial={false}>
+            {showMap && (
+              <motion.div
+                key="map"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="rounded-3xl overflow-hidden shadow-md border border-[#80B9B6]/15"
+              >
                 <PrintStationsMap
-                  locations={shops}
+                  locations={mockLocations}
                   selectedLocation={selectedLocation}
                   onLocationSelect={handleLocationSelect}
                   userLocation={userLocation}
                 />
-              )}
-            </Card>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
+          {/* Shop list */}
           <div className="space-y-2.5">
-            {shops.map((shop, index) => {
+            {PRINT_SHOPS.map((shop, i) => {
+              const loc = mockLocations.find((l) => l.id === shop.id)!;
               const isSelected = selectedLocation?.id === shop.id;
-              const isPremium = shop.tier === "premium";
               const etaColor =
                 shop.waitTime <= 5
                   ? "text-green-700 bg-green-50"
                   : shop.waitTime <= 10
                     ? "text-amber-700 bg-amber-50"
                     : "text-orange-700 bg-orange-50";
-
               return (
                 <motion.div
                   key={shop.id}
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.06 }}
-                  className={`overflow-hidden rounded-2xl border-2 transition-all ${isSelected ? "border-[#00736D] bg-gradient-to-r from-[#E6F1F0] to-white shadow-md shadow-[#00736D]/10" : "border-[#80B9B6]/20 bg-white hover:border-[#00736D]/30 hover:shadow-sm"}`}
+                  transition={{ delay: i * 0.06 }}
+                  className={`overflow-hidden rounded-2xl border-2 transition-all ${
+                    isSelected
+                      ? "border-[#00736D] bg-gradient-to-r from-[#E6F1F0] to-white shadow-md shadow-[#00736D]/10"
+                      : "border-[#80B9B6]/20 bg-white hover:border-[#00736D]/30 hover:shadow-sm"
+                  }`}
                 >
                   <button
                     type="button"
-                    onClick={() => handleLocationSelect(shop)}
+                    onClick={() => handleLocationSelect(loc)}
                     className="flex w-full items-center gap-3 p-3.5 text-left active:scale-[0.99]"
                   >
+                    {/* Icon */}
                     <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? "bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-md" : "bg-[#E6F1F0]"}`}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
+                        isSelected
+                          ? "bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-md"
+                          : "bg-[#E6F1F0]"
+                      }`}
                     >
                       <Printer
                         className={`w-5 h-5 ${isSelected ? "text-white" : "text-[#00736D]"}`}
                       />
                     </div>
 
+                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <p className="truncate text-sm font-bold text-[#002E2C]">
                           {shop.name}
                         </p>
-                        {isPremium && (
-                          <span className="rounded-full bg-[#002E2C] px-2 py-0.5 text-[10px] font-bold text-white">
-                            Premium
-                          </span>
+                        {shop.isFlagship && (
+                          <Star className="h-3 w-3 shrink-0 fill-[#00736D] text-[#00736D]" />
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-2">
@@ -359,74 +650,80 @@ export default function StudentHome() {
                         >
                           {shop.waitTime} min ETA
                         </span>
-                        {isPremium && (
-                          <span className="flex items-center gap-1 text-[10px] font-semibold text-[#00736D]">
-                            <Sparkles className="h-2.5 w-2.5" /> Groq AI
+                        {shop.waitTime <= 5 && (
+                          <span className="text-[10px] font-semibold text-green-600 flex items-center gap-0.5">
+                            <Zap className="w-2.5 h-2.5" /> Fast
                           </span>
                         )}
                       </div>
                     </div>
 
+                    {/* Status dot + check */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <div
-                        className={`w-2 h-2 rounded-full ${shop.status === "online" ? "bg-green-500 shadow-sm shadow-green-500/60" : "bg-rose-400"}`}
+                        className={`w-2 h-2 rounded-full ${
+                          shop.status === "online"
+                            ? "bg-green-500 shadow-sm shadow-green-500/60"
+                            : "bg-rose-400"
+                        }`}
                       />
-                      {isSelected && <span className="text-[#00736D]">✓</span>}
+                      {isSelected && (
+                        <CheckCircle2 className="w-5 h-5 text-[#00736D]" />
+                      )}
                     </div>
                   </button>
+                  <div className="border-t border-[#80B9B6]/15 px-3 pb-3">
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => navigate(`/shops/${shop.slug}`)}
+                      className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-[#E6F1F0]/80 py-2 text-[11px] font-bold text-[#00736D]"
+                    >
+                      View Profile
+                      <ChevronDown className="h-3 w-3 -rotate-90" />
+                    </motion.button>
+                  </div>
                 </motion.div>
               );
             })}
           </div>
-
-          {premiumChatShop && (
-            <Card className="border-[#00736D]/20 bg-[#E6F1F0]/50 p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-black text-[#002E2C]">
-                <Sparkles className="h-4 w-4 text-[#00736D]" />
-                Groq AI available here
-              </div>
-              <p className="mt-1 text-xs text-[#00736D]">
-                Premium partners get the ultra-low latency reservation bot when
-                the shop is offline.
-              </p>
-              <Button
-                type="button"
-                onClick={() =>
-                  navigate(`/shops/${premiumChatShop.slug}/contact`)
-                }
-                className="mt-3 w-full gap-2 rounded-2xl bg-gradient-to-r from-[#00736D] to-[#002E2C] text-white"
-              >
-                Open AI Chat <MessageCircle className="h-4 w-4" />
-              </Button>
-            </Card>
-          )}
         </div>
       </div>
+      {/* end scroll area */}
 
       <ShopProfileSheet
         shop={profileShop}
         onClose={() => setProfileShop(null)}
       />
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#80B9B6]/20 bg-white/95 px-4 py-4 shadow-2xl shadow-black/10 backdrop-blur-xl">
-        <div className="mx-auto max-w-lg">
+      {/* ── STICKY BOTTOM CTA ─────────────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[#80B9B6]/20 px-4 py-4 shadow-2xl shadow-black/10">
+        <div className="max-w-lg mx-auto">
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={handleContinue}
             disabled={!canContinue}
-            className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-black text-base transition-all ${canContinue ? "bg-gradient-to-r from-[#00736D] via-[#008A83] to-[#002E2C] text-white shadow-lg shadow-[#00736D]/30 hover:shadow-xl hover:shadow-[#00736D]/40" : "bg-[#E6F1F0] text-[#80B9B6] cursor-not-allowed"}`}
+            className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-black text-base transition-all ${
+              canContinue
+                ? "bg-gradient-to-r from-[#00736D] via-[#008A83] to-[#002E2C] text-white shadow-lg shadow-[#00736D]/30 hover:shadow-xl hover:shadow-[#00736D]/40"
+                : "bg-[#E6F1F0] text-[#80B9B6] cursor-not-allowed"
+            }`}
           >
             <span>Continue to Print Settings</span>
             {canContinue && <ChevronRight className="w-5 h-5" />}
           </motion.button>
 
+          {/* Hint text */}
           {!canContinue && (
             <p className="text-center text-[11px] text-[#80B9B6] font-medium mt-2">
               {!selectedFile
                 ? "Upload a document to get started"
                 : !selectedLocation
                   ? "Select a partner shop"
-                  : "Fix the distance error above"}
+                  : mode === "later" && !selectedSlot
+                    ? "Choose a time slot"
+                    : "Fix the distance error above"}
             </p>
           )}
         </div>

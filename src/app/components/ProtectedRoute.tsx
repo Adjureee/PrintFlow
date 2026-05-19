@@ -2,25 +2,8 @@
 
 import { Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "../lib/auth-context";
-import type { AppRole } from "../lib/print-shops";
 
-interface ProtectedRouteProps {
-  allowedRoles?: AppRole[];
-}
-
-function getFallbackPath(role: AppRole) {
-  if (role === "superadmin") {
-    return "/superadmin";
-  }
-
-  if (role === "vendor") {
-    return "/shop";
-  }
-
-  return "/";
-}
-
-export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute() {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -39,8 +22,24 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to={getFallbackPath(user.role)} replace />;
+  // Redirect based on user type
+  const isShopRoute =
+    location.pathname === "/shop" || location.pathname.startsWith("/shop/");
+  const isStudentRoute =
+    location.pathname === "/" ||
+    location.pathname.startsWith("/settings") ||
+    location.pathname.startsWith("/status") ||
+    location.pathname.startsWith("/shops") ||
+    (location.pathname.startsWith("/profile") && !isShopRoute);
+
+  // If shop user tries to access student routes, redirect to shop dashboard
+  if (user.userType === "shop" && isStudentRoute) {
+    return <Navigate to="/shop" replace />;
+  }
+
+  // If student user tries to access shop routes, redirect to student home
+  if (user.userType === "student" && isShopRoute) {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

@@ -8,11 +8,9 @@ export interface ShopChatMessage {
 }
 
 export interface ShopChatContext {
-  shopId: string;
   slug: string;
   name: string;
   status: "online" | "offline";
-  tier: "standard" | "premium";
   address: string;
   hours: string;
   services: string[];

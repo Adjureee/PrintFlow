@@ -9,34 +9,15 @@ import {
 } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { projectId, publicAnonKey } from "../../../utils/supabase/info";
-import type { AppRole } from "./print-shops";
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 const supabase = createClient(supabaseUrl, publicAnonKey);
-
-function normalizeRole(role: unknown): AppRole {
-  if (role === "vendor" || role === "student" || role === "superadmin") {
-    return role;
-  }
-
-  // Legacy compatibility for earlier role naming.
-  if (role === "shop") {
-    return "vendor";
-  }
-
-  if (role === "admin") {
-    return "superadmin";
-  }
-
-  return "student";
-}
 
 interface User {
   id: string;
   email: string;
   name: string;
-  role: AppRole;
-  userType: AppRole;
+  userType: "student" | "shop";
   phone?: string;
   address?: string;
   studentId?: string;
@@ -56,7 +37,7 @@ interface AuthContextType {
     email: string,
     password: string,
     name: string,
-    role: AppRole,
+    userType: "student" | "shop",
   ) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (profileData: {
@@ -90,16 +71,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.session) {
         const { access_token, user: authUser } = data.session;
-        const normalizedRole = normalizeRole(
-          authUser.user_metadata?.role || authUser.user_metadata?.userType,
-        );
         setAccessToken(access_token);
         setUser({
           id: authUser.id,
           email: authUser.email || "",
           name: authUser.user_metadata?.name || "",
-          role: normalizedRole,
-          userType: normalizedRole,
+          userType: authUser.user_metadata?.userType || "student",
           phone: authUser.user_metadata?.phone,
           address: authUser.user_metadata?.address,
           studentId: authUser.user_metadata?.studentId,
@@ -127,15 +104,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.session) {
         const { access_token, user: authUser } = data.session;
-        const normalizedRole = normalizeRole(
-          authUser.user_metadata?.role || authUser.user_metadata?.userType,
-        );
         const userData = {
           id: authUser.id,
           email: authUser.email || "",
           name: authUser.user_metadata?.name || "",
-          role: normalizedRole,
-          userType: normalizedRole,
+          userType: authUser.user_metadata?.userType || "student",
           phone: authUser.user_metadata?.phone,
           address: authUser.user_metadata?.address,
           studentId: authUser.user_metadata?.studentId,
@@ -160,10 +133,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name: string,
-    role: AppRole,
+    userType: "student" | "shop",
   ) => {
     try {
-      const normalizedRole = normalizeRole(role);
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/server/signup`,
         {
@@ -172,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${publicAnonKey}`,
           },
-          body: JSON.stringify({ email, password, name, role: normalizedRole }),
+          body: JSON.stringify({ email, password, name, userType }),
         },
       );
 
@@ -249,16 +221,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.session) {
         const { access_token, user: authUser } = data.session;
-        const normalizedRole = normalizeRole(
-          authUser.user_metadata?.role || authUser.user_metadata?.userType,
-        );
         setAccessToken(access_token);
         setUser({
           id: authUser.id,
           email: authUser.email || "",
           name: authUser.user_metadata?.name || "",
-          role: normalizedRole,
-          userType: normalizedRole,
+          userType: authUser.user_metadata?.userType || "student",
           phone: authUser.user_metadata?.phone,
           address: authUser.user_metadata?.address,
           studentId: authUser.user_metadata?.studentId,

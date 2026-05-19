@@ -1,673 +1,413 @@
-"use client";
-
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router";
-import { motion } from "motion/react";
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { motion, AnimatePresence } from 'motion/react';
 import {
-  Activity,
-  ArrowRight,
-  Bell,
-  Bot,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  LogOut,
-  MapPin,
-  Package,
-  RefreshCw,
-  Settings,
-  Shield,
-  Sparkles,
-  Store,
-  TrendingUp,
-} from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
-import { PageLoader } from "../../components/ui/page-loader";
-import { useAuth } from "../../lib/auth-context";
-import {
-  fetchVendorDashboardData,
-  formatPeso,
-  type VendorDashboardData,
-} from "../../lib/vendor-dashboard";
+  Bot, Bell, LogOut, BarChart3, ChevronRight, Clock, Package,
+  CheckCircle2, Sparkles, FileText, Store, TrendingUp, Zap,
+  ArrowRight, User, Settings,
+} from 'lucide-react';
+import { useAuth } from '../../lib/auth-context';
 
-const STATUS_TONES: Record<
-  string,
-  { label: string; pill: string; icon: ReactNode }
-> = {
-  pending: {
-    label: "Pending",
-    pill: "bg-amber-50 text-amber-700",
-    icon: <Clock className="h-3.5 w-3.5" />,
-  },
-  "awaiting-verification": {
-    label: "Awaiting Verification",
-    pill: "bg-amber-50 text-amber-700",
-    icon: <Clock className="h-3.5 w-3.5" />,
-  },
-  processing: {
-    label: "Processing",
-    pill: "bg-blue-50 text-blue-700",
-    icon: <Package className="h-3.5 w-3.5" />,
-  },
-  printing: {
-    label: "Printing",
-    pill: "bg-blue-50 text-blue-700",
-    icon: <Package className="h-3.5 w-3.5" />,
-  },
-  ready: {
-    label: "Ready",
-    pill: "bg-emerald-50 text-emerald-700",
-    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-  },
-  completed: {
-    label: "Completed",
-    pill: "bg-slate-100 text-slate-600",
-    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-  },
+/* ─── Queue data ───────────────────────────────────────────────────── */
+const TODAY_QUEUE = [
+  { id: 'q1', time: '08:00 AM', name: 'Maria Santos', pages: 2,  type: 'PDF',  copies: 1, status: 'done',        isAI: false },
+  { id: 'q2', time: '09:30 AM', name: 'Jed Camacho',  pages: 5,  type: 'DOCX', copies: 3, status: 'processing',  isAI: false },
+  { id: 'q3', time: '11:00 AM', name: 'Ana Reyes',    pages: 8,  type: 'PDF',  copies: 2, status: 'ready',       isAI: false },
+  { id: 'q4', time: '01:00 PM', name: 'Mark',         pages: 15, type: 'PDF',  copies: 1, status: 'ai-reserved', isAI: true  },
+  { id: 'q5', time: '02:30 PM', name: 'Lisa Tan',     pages: 3,  type: 'PDF',  copies: 2, status: 'pending',     isAI: false },
+  { id: 'q6', time: '03:30 PM', name: 'Ryan Cruz',    pages: 8,  type: 'DOCX', copies: 1, status: 'pending',     isAI: false },
+];
+
+/* ─── Status config ────────────────────────────────────────────────── */
+type Status = 'done' | 'processing' | 'ready' | 'ai-reserved' | 'pending';
+const STATUS: Record<Status, { label: string; pill: string; dot: string; icon: React.ReactNode }> = {
+  done:         { label: 'Done',        pill: 'bg-gray-100 text-gray-500',               dot: 'bg-gray-400',    icon: <CheckCircle2 className="w-3 h-3" /> },
+  processing:   { label: 'Printing…',  pill: 'bg-blue-50 text-blue-600',                dot: 'bg-blue-500',    icon: <Package className="w-3 h-3" /> },
+  ready:        { label: 'Ready',       pill: 'bg-emerald-50 text-emerald-700',          dot: 'bg-emerald-500', icon: <CheckCircle2 className="w-3 h-3" /> },
+  'ai-reserved':{ label: 'AI Reserved', pill: 'bg-[#E6F1F0] text-[#00736D]',            dot: 'bg-[#00736D]',   icon: <Bot className="w-3 h-3" /> },
+  pending:      { label: 'Pending',     pill: 'bg-amber-50 text-amber-600',              dot: 'bg-amber-400',   icon: <Clock className="w-3 h-3" /> },
 };
 
-function ToggleSwitch({
-  enabled,
-  onToggle,
-}: {
-  enabled: boolean;
-  onToggle: () => void;
-}) {
+/* ─── Toggle Switch ────────────────────────────────────────────────── */
+function ToggleSwitch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <motion.button
-      type="button"
-      whileTap={{ scale: 0.94 }}
       onClick={onToggle}
-      className={`relative h-7 w-12 rounded-full transition-colors ${enabled ? "bg-[#00736D]" : "bg-slate-300"}`}
+      className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex-shrink-0 ${
+        on ? 'bg-[#00736D]' : 'bg-gray-300'
+      }`}
+      whileTap={{ scale: 0.93 }}
     >
-      <motion.span
-        animate={{ x: enabled ? 22 : 2 }}
-        transition={{ type: "spring", damping: 18, stiffness: 420 }}
-        className="absolute top-1 h-5 w-5 rounded-full bg-white shadow-md"
+      <motion.div
+        animate={{ x: on ? 24 : 2 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 400 }}
+        className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-md"
       />
     </motion.button>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  hint,
-  icon,
-  accent,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  icon: ReactNode;
-  accent: string;
-}) {
+/* ─── Queue Row ────────────────────────────────────────────────────── */
+function QueueRow({ item, index, onReview }: { item: typeof TODAY_QUEUE[0]; index: number; onReview: () => void }) {
+  const cfg = STATUS[item.status as Status];
   return (
-    <Card className="border-[#80B9B6]/20 bg-white/90 p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-[#80B9B6]">
-            {label}
-          </p>
-          <p className="mt-2 text-3xl font-black text-[#002E2C]">{value}</p>
-          <p className="mt-1 text-xs font-medium text-slate-500">{hint}</p>
-        </div>
-        <div className={`rounded-2xl p-3 ${accent}`}>{icon}</div>
+    <motion.div
+      initial={{ opacity: 0, x: -12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: 0.05 * index }}
+      className={`flex items-center gap-3 p-3.5 rounded-2xl transition-all ${
+        item.isAI
+          ? 'bg-gradient-to-r from-[#E6F1F0]/80 to-[#80B9B6]/15 border border-[#80B9B6]/40 shadow-sm'
+          : 'bg-white border border-slate-100'
+      }`}
+    >
+      {/* Time */}
+      <div className="flex-shrink-0 w-16 text-center">
+        <span className={`text-[11px] font-black leading-tight block ${item.isAI ? 'text-[#00736D]' : 'text-slate-400'}`}>
+          {item.time.split(' ')[0]}
+        </span>
+        <span className={`text-[9px] font-semibold ${item.isAI ? 'text-[#80B9B6]' : 'text-slate-300'}`}>
+          {item.time.split(' ')[1]}
+        </span>
       </div>
-    </Card>
+
+      {/* Divider dot */}
+      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p className={`text-sm font-black truncate ${item.isAI ? 'text-[#002E2C]' : 'text-slate-700'}`}>
+            {item.name}
+          </p>
+          {item.isAI && <Bot className="w-3.5 h-3.5 text-[#00736D] flex-shrink-0" />}
+        </div>
+        <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+          {item.pages} pages · {item.type} · {item.copies}× copy
+        </p>
+      </div>
+
+      {/* Status / Action */}
+      {item.isAI ? (
+        <motion.button
+          whileTap={{ scale: 0.93 }}
+          onClick={onReview}
+          className="flex-shrink-0 px-2.5 py-1.5 bg-[#00736D] text-white text-[10px] font-black rounded-xl shadow-sm shadow-[#00736D]/30"
+        >
+          Review
+        </motion.button>
+      ) : (
+        <span className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold ${cfg.pill}`}>
+          {cfg.icon}
+          {cfg.label}
+        </span>
+      )}
+    </motion.div>
   );
 }
 
-function OrderCard({
-  order,
-  onOpen,
-}: {
-  order: VendorDashboardData["orders"][number];
-  onOpen: () => void;
-}) {
-  const tone = STATUS_TONES[order.status] ?? STATUS_TONES.pending;
-
-  return (
-    <div className="rounded-2xl border border-[#80B9B6]/15 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-black text-[#002E2C]">
-              {order.student_name}
-            </p>
-            <span className="rounded-full bg-[#E6F1F0] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#00736D]">
-              {order.student_id}
-            </span>
-          </div>
-          <p className="mt-1 truncate text-xs text-slate-500">
-            {order.file_name} · {order.location}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${tone.pill}`}
-            >
-              {tone.icon}
-              {tone.label}
-            </span>
-            <span className="text-[11px] font-semibold text-slate-400">
-              {new Date(order.created_at).toLocaleString("en-US", {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="rounded-2xl bg-[#F2F8F7] px-3 py-2 text-right">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#80B9B6]">
-              Revenue
-            </p>
-            <p className="text-sm font-black text-[#002E2C]">
-              {formatPeso(Number(order.total_amount || 0))}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpen}
-            className="h-8 rounded-xl border-[#80B9B6]/30 text-xs"
-          >
-            View
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/* ─── Main Component ───────────────────────────────────────────────── */
 export default function ShopHome() {
   const navigate = useNavigate();
-  const { user, accessToken, signOut } = useAuth();
-  const [dashboard, setDashboard] = useState<VendorDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
-  const [offlineOnly, setOfflineOnly] = useState(false);
+  const { user, signOut } = useAuth();
+  const [aiMode, setAIMode] = useState(true);
+  const [notifDismissed, setNotifDismissed] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  const handleLogout = async () => { await signOut(); navigate('/login'); };
 
-    async function load() {
-      if (!user?.id || !accessToken) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await fetchVendorDashboardData(accessToken, user.id);
-        if (active) {
-          setDashboard(result);
-        }
-      } catch (err) {
-        console.error("Vendor dashboard load failed:", err);
-        if (active) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load vendor dashboard",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      active = false;
-    };
-  }, [accessToken, user?.id]);
-
-  const handleLogout = async () => {
-    await signOut();
-    navigate("/login");
-  };
-
-  const handleMockUpgrade = () => {
-    setCheckoutLoading(true);
-    setTimeout(() => {
-      setCheckoutLoading(false);
-      toast.message("Mock checkout opened", {
-        description:
-          "Connect this CTA to your billing provider and update profiles.subscription_tier to premium on success.",
-      });
-    }, 700);
-  };
-
-  const shop = dashboard?.shop ?? null;
-  const metrics = dashboard?.metrics;
-  const latestOrder = dashboard?.orders[0];
-  const subscriptionTier =
-    dashboard?.profile?.subscription_tier ?? shop?.tier ?? "standard";
-  const isPremium = subscriptionTier === "premium";
-
-  const revenueLabel = useMemo(
-    () => formatPeso(metrics?.revenue ?? 0),
-    [metrics?.revenue],
-  );
-
-  if (loading) {
-    return <PageLoader label="Loading vendor dashboard…" />;
-  }
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#F8FCFC] via-white to-[#E6F1F0] p-6 text-center">
-        <p className="max-w-md text-sm font-medium text-[#002E2C]">{error}</p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button onClick={() => window.location.reload()}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Retry
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/shop/register")}>
-            Register shop
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!shop) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#F8FCFC] via-white to-[#E6F1F0] px-4 py-10">
-        <div className="mx-auto max-w-2xl rounded-[2rem] border border-[#80B9B6]/20 bg-white/90 p-8 shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-[#E6F1F0] p-3 text-[#00736D]">
-              <Store className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-[#002E2C]">
-                Vendor dashboard
-              </h1>
-              <p className="text-sm text-slate-500">
-                No shop is linked to your vendor account yet.
-              </p>
-            </div>
-          </div>
-          <div className="mt-6 rounded-3xl bg-[#F2F8F7] p-5">
-            <p className="text-sm font-semibold text-[#002E2C]">
-              Create your live shop record
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              Register a partner shop so orders, revenue, and premium AI
-              controls stream from Supabase.
-            </p>
-            <Button className="mt-4" onClick={() => navigate("/shop/register")}>
-              Register shop
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const stats = [
+    { label: 'Pending',    value: 3, icon: <Clock className="w-4 h-4" />,        color: 'text-amber-600  bg-amber-50',   dot: 'bg-amber-400' },
+    { label: 'Printing',   value: 2, icon: <Package className="w-4 h-4" />,       color: 'text-blue-600   bg-blue-50',    dot: 'bg-blue-500' },
+    { label: 'Today',      value: 6, icon: <CheckCircle2 className="w-4 h-4" />,  color: 'text-[#00736D]  bg-[#E6F1F0]', dot: 'bg-[#00736D]' },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E6F1F0]/60 via-white to-[#F8FAFA] pb-10">
-      <div className="sticky top-0 z-40 border-b border-[#80B9B6]/20 bg-white/85 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto max-w-6xl px-4 py-3.5">
+    <div className="min-h-screen bg-[#F2F8F7]">
+
+      {/* ── STICKY HEADER ─────────────────────────────────────────── */}
+      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-slate-100 shadow-sm">
+        <div className="max-w-lg mx-auto px-4 py-3.5">
+
+          {/* Row 1: identity + actions */}
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/shop/profile")}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00736D] to-[#002E2C] shadow-lg shadow-[#00736D]/25"
+
+            {/* Shop logo */}
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              onClick={() => navigate('/shop/profile')}
+              className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#00736D] to-[#002E2C] flex items-center justify-center shadow-lg shadow-[#00736D]/25 flex-shrink-0 cursor-pointer"
             >
-              <Store className="h-5 w-5 text-white" />
-            </button>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#80B9B6]">
-                Vendor dashboard
+              <Store className="w-5 h-5 text-white" />
+            </motion.div>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-[#80B9B6] font-semibold uppercase tracking-widest">
+                Shop Dashboard
               </p>
-              <h1 className="truncate text-lg font-black leading-tight text-[#002E2C]">
-                {shop.shop_name}
+              <h1 className="text-[#002E2C] font-black text-base leading-tight truncate">
+                Hello, {user?.name ?? 'Ink Masters'}! 👋
               </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F1F0] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#00736D]">
-                  {shop.online ? "Online" : "Offline"}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#002E2C] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
-                  <Sparkles className="h-3 w-3" />
-                  {isPremium ? "Premium" : "Standard"}
-                </span>
+            </div>
+
+            {/* Icon actions */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={() => navigate('/shop/analytics')}
+                className="w-9 h-9 rounded-xl bg-[#E6F1F0] flex items-center justify-center"
+              >
+                <BarChart3 className="w-4 h-4 text-[#00736D]" />
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={() => navigate('/shop/notifications')}
+                className="relative w-9 h-9 rounded-xl bg-[#E6F1F0] flex items-center justify-center"
+              >
+                <Bell className="w-4 h-4 text-[#00736D]" />
+                {!notifDismissed && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
+                )}
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={handleLogout}
+                className="w-9 h-9 rounded-xl bg-[#E6F1F0] flex items-center justify-center"
+              >
+                <LogOut className="w-4 h-4 text-[#80B9B6]" />
+              </motion.button>
+            </div>
+          </div>
+
+          {/* Row 2: AI toggle */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${aiMode ? 'bg-[#E6F1F0]' : 'bg-gray-100'}`}>
+                <Bot className={`w-3.5 h-3.5 ${aiMode ? 'text-[#00736D]' : 'text-gray-400'}`} />
+              </div>
+              <div>
+                <p className="text-[12px] font-black text-[#002E2C] leading-tight">AI Auto-Pilot (Away Mode)</p>
+                <p className={`text-[10px] font-semibold ${aiMode ? 'text-[#00736D]' : 'text-gray-400'}`}>
+                  {aiMode ? 'Active — AI is handling reservations' : 'Disabled — Manual mode'}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => navigate("/shop/analytics")}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6F1F0]"
-              >
-                <TrendingUp className="h-4 w-4 text-[#00736D]" />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/shop/notifications")}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6F1F0]"
-              >
-                <Bell className="h-4 w-4 text-[#00736D]" />
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E6F1F0]"
-              >
-                <LogOut className="h-4 w-4 text-[#80B9B6]" />
-              </button>
-            </div>
+            <ToggleSwitch on={aiMode} onToggle={() => setAIMode(v => !v)} />
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 pt-5">
-        <Card className="overflow-hidden border-[#80B9B6]/20 bg-[#002E2C] p-5 text-white shadow-xl shadow-[#002E2C]/20">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-              <Activity className="h-5 w-5 text-[#80B9B6]" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#80B9B6]">
-                Live operations
-              </p>
-              <h2 className="mt-1 text-lg font-black">
-                Real-time vendor control center
-              </h2>
-              <p className="mt-2 text-sm text-white/75">
-                The dashboard reads live data from Supabase by your
-                authenticated vendor account. No dummy metrics remain.
-              </p>
-            </div>
-          </div>
-        </Card>
+      {/* ── SCROLL CONTENT ────────────────────────────────────────── */}
+      <div className="max-w-lg mx-auto px-4 pt-5 pb-10 space-y-5">
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label="Pending orders"
-            value={String(metrics?.pendingOrders ?? 0)}
-            hint="Awaiting verification or production"
-            icon={<Clock className="h-5 w-5 text-amber-700" />}
-            accent="bg-amber-50"
-          />
-          <MetricCard
-            label="Completed prints"
-            value={String(metrics?.completedPrints ?? 0)}
-            hint="Marked completed in Supabase"
-            icon={<CheckCircle2 className="h-5 w-5 text-emerald-700" />}
-            accent="bg-emerald-50"
-          />
-          <MetricCard
-            label="Revenue"
-            value={revenueLabel}
-            hint="Sum of live orders tied to this shop"
-            icon={<TrendingUp className="h-5 w-5 text-[#00736D]" />}
-            accent="bg-[#E6F1F0]"
-          />
-          <MetricCard
-            label="Active orders"
-            value={String(metrics?.activeOrders ?? 0)}
-            hint="In progress or ready for pickup"
-            icon={<Package className="h-5 w-5 text-slate-700" />}
-            accent="bg-slate-100"
-          />
+        {/* ── MINI STATS ROW ──────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-2.5">
+          {stats.map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.06 * i }}
+              className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-sm"
+            >
+              <div className={`w-7 h-7 rounded-xl flex items-center justify-center mb-2 ${s.color.split(' ')[1]}`}>
+                <span className={s.color.split(' ')[0]}>{s.icon}</span>
+              </div>
+              <p className="text-2xl font-black text-[#002E2C]">{s.value}</p>
+              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{s.label}</p>
+            </motion.div>
+          ))}
         </div>
 
-        <Card className="border-[#80B9B6]/20 bg-white/90 p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-[#80B9B6]">
-                Subscription
-              </p>
-              <h2 className="mt-1 text-xl font-black text-[#002E2C]">
-                {isPremium
-                  ? "Premium subscription active"
-                  : "Standard map listing"}
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                {isPremium
-                  ? "Premium unlocks the ultra-low latency Groq AI auto-reply bot for offline student reservations, plus live vendor controls."
-                  : "Standard vendors get a basic map listing. Upgrade to unlock the ultra-low latency Groq AI auto-reply bot for offline reservations."}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-[#F2F8F7] px-3 py-2 text-right">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#80B9B6]">
-                Tier
-              </p>
-              <p className="text-sm font-black capitalize text-[#002E2C]">
-                {subscriptionTier}
-              </p>
-            </div>
-          </div>
+        {/* ── AI NOTIFICATION CARD ─��──────────────────────────────── */}
+        <AnimatePresence>
+          {aiMode && !notifDismissed && (
+            <motion.div
+              key="ai-notif"
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -16, scale: 0.96 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+              className="relative rounded-3xl overflow-hidden shadow-2xl shadow-[#00736D]/20"
+              style={{ isolation: 'isolate' }}
+            >
+              {/* Glow ring */}
+              <div className="absolute inset-0 rounded-3xl ring-2 ring-[#00736D]/30 pointer-events-none z-10" />
 
-          {!isPremium ? (
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-              <div className="rounded-3xl border border-dashed border-[#80B9B6]/35 bg-[#F8FCFC] p-5">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-[#00736D]" />
-                  <p className="text-sm font-black text-[#002E2C]">
-                    Upgrade to Premium
-                  </p>
+              {/* Gradient top band */}
+              <div className="bg-gradient-to-r from-[#002E2C] via-[#00736D] to-[#008A83] px-5 pt-5 pb-6 relative overflow-hidden">
+                {/* Decorative circles */}
+                <div className="absolute -top-6 -right-6 w-28 h-28 bg-white/5 rounded-full" />
+                <div className="absolute -bottom-8 -left-4 w-20 h-20 bg-white/5 rounded-full" />
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
+                  className="absolute top-2 right-12 w-16 h-16 border-2 border-white/10 rounded-full"
+                />
+
+                {/* Header row */}
+                <div className="flex items-start gap-3 relative z-10">
+                  {/* Animated robot icon */}
+                  <div className="relative flex-shrink-0">
+                    <motion.div
+                      animate={{ scale: [1, 1.08, 1] }}
+                      transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+                      className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 flex items-center justify-center shadow-lg"
+                    >
+                      <Bot className="w-8 h-8 text-white" />
+                    </motion.div>
+                    {/* Pulse ring */}
+                    <motion.div
+                      animate={{ scale: [1, 1.6], opacity: [0.6, 0] }}
+                      transition={{ repeat: Infinity, duration: 1.8, ease: 'easeOut' }}
+                      className="absolute inset-0 rounded-2xl border-2 border-white/40"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h2 className="text-white font-black text-lg leading-tight">
+                        New AI Reservation!
+                      </h2>
+                      <motion.span
+                        animate={{ opacity: [1, 0.5, 1] }}
+                        transition={{ repeat: Infinity, duration: 1.4 }}
+                        className="px-2 py-0.5 bg-white/20 text-white text-[10px] font-black rounded-full uppercase tracking-widest"
+                      >
+                        NEW
+                      </motion.span>
+                    </div>
+                    <p className="text-white/70 text-[11px] font-semibold flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Secured while you were away
+                    </p>
+                  </div>
                 </div>
-                <ul className="mt-4 space-y-2 text-sm text-slate-600">
-                  <li>• Basic map listing remains visible to students.</li>
-                  <li>
-                    • Premium adds Groq-powered auto-replies for offline
-                    reservations.
-                  </li>
-                  <li>
-                    • AI reservations sync against your live shop record in
-                    Supabase.
-                  </li>
-                </ul>
               </div>
-              <div className="rounded-3xl bg-[#002E2C] p-5 text-white">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#80B9B6]">
-                  Mock checkout
+
+              {/* White content area */}
+              <div className="bg-white px-5 pt-4 pb-5 space-y-4">
+
+                {/* Description */}
+                <p className="text-[#002E2C] text-sm leading-relaxed font-medium">
+                  Your AI Assistant secured a new booking while you were away.{' '}
+                  <span className="font-black text-[#002E2C]">Mark</span> scheduled a{' '}
+                  <span className="font-black text-[#00736D]">15-page PDF</span> for{' '}
+                  <span className="font-black text-[#002E2C]">1:00 PM</span>.
                 </p>
-                <p className="mt-2 text-lg font-black">
-                  Activate premium instantly in the demo flow
-                </p>
-                <p className="mt-2 text-sm text-white/70">
-                  Connect this button to your billing provider later. For now it
-                  only simulates the activation path.
-                </p>
-                <Button
-                  className="mt-4 w-full bg-white text-[#002E2C] hover:bg-white/90"
-                  onClick={handleMockUpgrade}
-                  disabled={checkoutLoading}
+
+                {/* Mini detail chips */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { icon: <FileText className="w-3 h-3" />, text: '15 pages · PDF' },
+                    { icon: <Clock className="w-3 h-3" />,     text: 'Today · 1:00 PM' },
+                    { icon: <Bot className="w-3 h-3" />,       text: 'AI Confirmed' },
+                  ].map(({ icon, text }) => (
+                    <div key={text} className="flex items-center gap-1.5 bg-[#E6F1F0] px-3 py-1.5 rounded-full">
+                      <span className="text-[#00736D]">{icon}</span>
+                      <span className="text-[11px] font-bold text-[#002E2C]">{text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* CTA button */}
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate('/shop/order/ORD-AI-001')}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-gradient-to-r from-[#00736D] to-[#002E2C] text-white font-black text-sm shadow-lg shadow-[#00736D]/30"
                 >
-                  {checkoutLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  Upgrade to Premium
-                </Button>
+                  <FileText className="w-4 h-4" />
+                  Review &amp; Accept File
+                  <ArrowRight className="w-4 h-4 ml-auto" />
+                </motion.button>
+
+                {/* Dismiss */}
+                <button
+                  onClick={() => setNotifDismissed(true)}
+                  className="w-full text-center text-[11px] text-slate-400 font-semibold hover:text-slate-600 transition-colors"
+                >
+                  Dismiss notification
+                </button>
               </div>
-            </div>
-          ) : (
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.85fr]">
-              <div className="rounded-3xl bg-gradient-to-br from-[#E6F1F0] to-white p-5 ring-1 ring-[#80B9B6]/20">
-                <div className="flex items-center gap-2">
-                  <Bot className="h-4 w-4 text-[#00736D]" />
-                  <p className="text-sm font-black text-[#002E2C]">
-                    Ultra-Low Latency Groq AI Auto-Reply Bot
-                  </p>
-                </div>
-                <p className="mt-2 text-sm text-slate-600">
-                  The backend checks your `print_shops` row before allowing Groq
-                  responses.
-                </p>
-                <div className="mt-4 space-y-3 rounded-2xl bg-white/80 p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-[#002E2C]">
-                        Auto-reply bot
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Enable or disable student reservation replies
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      enabled={autoReplyEnabled}
-                      onToggle={() => setAutoReplyEnabled((value) => !value)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-[#002E2C]">
-                        Offline only
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Restrict the bot to away-mode reservations
-                      </p>
-                    </div>
-                    <ToggleSwitch
-                      enabled={offlineOnly}
-                      onToggle={() => setOfflineOnly((value) => !value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 rounded-2xl bg-[#F2F8F7] px-3 py-2 text-xs font-semibold text-[#00736D]">
-                    <Sparkles className="h-4 w-4" />
-                    Groq model: llama3-8b-8192
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-3xl bg-[#002E2C] p-5 text-white">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#80B9B6]">
-                  AI configuration
-                </p>
-                <div className="mt-4 space-y-3 text-sm text-white/75">
-                  <div className="flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2">
-                    <Settings className="h-4 w-4 text-[#80B9B6]" />
-                    Premium settings are unlocked for this shop only.
-                  </div>
-                  <div className="flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2">
-                    <MapPin className="h-4 w-4 text-[#80B9B6]" />
-                    Basic map listing remains active for discovery.
-                  </div>
-                  <div className="flex items-center gap-2 rounded-2xl bg-white/10 px-3 py-2">
-                    <Shield className="h-4 w-4 text-[#80B9B6]" />
-                    Live access is checked against Supabase before every AI
-                    reply.
-                  </div>
-                </div>
-              </div>
-            </div>
+            </motion.div>
           )}
-        </Card>
+        </AnimatePresence>
 
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <Card className="border-[#80B9B6]/20 bg-white/90 p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-[#80B9B6]">
-                  Recent orders
-                </p>
-                <h3 className="mt-1 text-xl font-black text-[#002E2C]">
-                  Live queue from Supabase
-                </h3>
-              </div>
-              <Button
-                variant="ghost"
-                className="text-[#00736D]"
-                onClick={() => navigate("/shop/analytics")}
-              >
-                Open analytics
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
+        {/* AI mode off / notif dismissed — show small chip */}
+        {(!aiMode || notifDismissed) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-2.5 bg-white border border-slate-100 rounded-2xl px-4 py-3 shadow-sm"
+          >
+            <div className={`w-2 h-2 rounded-full ${aiMode ? 'bg-[#00736D] animate-pulse' : 'bg-gray-300'}`} />
+            <p className="text-sm font-semibold text-slate-500">
+              {aiMode ? 'AI Auto-Pilot is active — no new reservations yet.' : 'AI Auto-Pilot is off. Enable it to accept bookings automatically.'}
+            </p>
+          </motion.div>
+        )}
 
-            <div className="mt-5 space-y-3">
-              {dashboard?.orders.length ? (
-                dashboard.orders
-                  .slice(0, 6)
-                  .map((order) => (
-                    <OrderCard
-                      key={order.id}
-                      order={order}
-                      onOpen={() =>
-                        navigate(`/shop/order/${encodeURIComponent(order.id)}`)
-                      }
-                    />
-                  ))
-              ) : (
-                <div className="rounded-3xl border border-dashed border-[#80B9B6]/30 bg-[#F8FCFC] p-8 text-center">
-                  <p className="text-sm font-semibold text-[#002E2C]">
-                    No live orders yet.
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Once students place orders, they will appear here
-                    automatically.
-                  </p>
+        {/* ── TODAY'S QUEUE ──────────────────────────────────────── */}
+        <div>
+          {/* Section header */}
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-[#002E2C] font-black text-sm flex items-center gap-2">
+                <div className="w-5 h-5 rounded-lg bg-[#E6F1F0] flex items-center justify-center">
+                  <Clock className="w-3 h-3 text-[#00736D]" />
                 </div>
-              )}
-            </div>
-          </Card>
-
-          <div className="space-y-6">
-            <Card className="border-[#80B9B6]/20 bg-white/90 p-6 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-widest text-[#80B9B6]">
-                Live snapshot
-              </p>
-              <div className="mt-4 space-y-3 text-sm text-slate-600">
-                <div className="flex items-center justify-between rounded-2xl bg-[#F8FCFC] px-4 py-3">
-                  <span>Last updated</span>
-                  <span className="font-bold text-[#002E2C]">
-                    {latestOrder
-                      ? new Date(latestOrder.created_at).toLocaleString()
-                      : "No orders"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-[#F8FCFC] px-4 py-3">
-                  <span>Total orders</span>
-                  <span className="font-bold text-[#002E2C]">
-                    {metrics?.totalOrders ?? 0}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-[#F8FCFC] px-4 py-3">
-                  <span>Subscription</span>
-                  <span className="font-bold capitalize text-[#002E2C]">
-                    {subscriptionTier}
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="border-[#80B9B6]/20 bg-gradient-to-br from-[#002E2C] to-[#00736D] p-6 text-white shadow-sm">
-              <p className="text-xs font-black uppercase tracking-widest text-[#80B9B6]">
-                Quick action
-              </p>
-              <h3 className="mt-2 text-xl font-black">
-                Open your analytics view
+                Today's Queue
               </h3>
-              <p className="mt-2 text-sm text-white/75">
-                Review revenue, top customers, and daily trends pulled directly
-                from Supabase.
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5 ml-7">
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
-              <Button
-                className="mt-4 w-full bg-white text-[#002E2C] hover:bg-white/90"
-                onClick={() => navigate("/shop/analytics")}
-              >
-                View analytics
-              </Button>
-            </Card>
+            </div>
+            <button
+              onClick={() => navigate('/shop/notifications')}
+              className="text-xs font-bold text-[#80B9B6] hover:text-[#00736D] transition-colors"
+            >
+              View all →
+            </button>
+          </div>
+
+          {/* Queue rows */}
+          <div className="space-y-2">
+            {TODAY_QUEUE.map((item, i) => (
+              <QueueRow
+                key={item.id}
+                item={item}
+                index={i}
+                onReview={() => navigate('/shop/order/ORD-AI-001')}
+              />
+            ))}
           </div>
         </div>
+
+        {/* ── QUICK ACTIONS ──────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: 'Analytics',    sub: 'Revenue & trends',  icon: <BarChart3 className="w-5 h-5" />,    path: '/shop/analytics' },
+            { label: 'Notifications', sub: 'Pending alerts',   icon: <Bell className="w-5 h-5" />,         path: '/shop/notifications' },
+          ].map(({ label, sub, icon, path }) => (
+            <motion.button
+              key={label}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => navigate(path)}
+              className="bg-white border border-slate-100 rounded-2xl p-4 flex items-center gap-3 hover:border-[#80B9B6]/40 hover:shadow-md transition-all text-left"
+            >
+              <div className="w-9 h-9 rounded-xl bg-[#E6F1F0] flex items-center justify-center text-[#00736D] flex-shrink-0">
+                {icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[#002E2C] font-black text-sm">{label}</p>
+                <p className="text-[10px] text-slate-400 font-medium">{sub}</p>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+
       </div>
     </div>
   );

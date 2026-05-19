@@ -1,473 +1,445 @@
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
-import { motion } from "motion/react";
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { motion } from 'motion/react';
 import {
   ArrowLeft,
-  BarChart3,
-  Banknote,
-  Calendar,
   Download,
+  TrendingUp,
+  Banknote,
   Package,
-  PieChart,
-  RefreshCw,
   Users,
-} from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
-import { PageLoader } from "../../components/ui/page-loader";
-import { useAuth } from "../../lib/auth-context";
-import {
-  buildTopCustomers,
-  buildVendorDailySummary,
-  buildVendorMetrics,
-  fetchVendorDashboardData,
-  formatPeso,
-  type VendorDashboardData,
-} from "../../lib/vendor-dashboard";
+  Calendar,
+  FileText,
+  BarChart3,
+  PieChart,
+  TrendingDown
+} from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { toast } from 'sonner';
 
-type RangeKey = "7d" | "30d" | "90d";
-
-function exportCsv(filename: string, rows: string[][]) {
-  const content = rows.map((row) => row.join(",")).join("\n");
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
+// Mock analytics data
+const analyticsData = {
+  daily: [
+    { date: '2026-03-25', orders: 12, revenue: 580, bw: 8, color: 4 },
+    { date: '2026-03-26', orders: 15, revenue: 720, bw: 10, color: 5 },
+    { date: '2026-03-27', orders: 18, revenue: 890, bw: 12, color: 6 },
+    { date: '2026-03-28', orders: 10, revenue: 450, bw: 7, color: 3 },
+    { date: '2026-03-29', orders: 20, revenue: 1050, bw: 13, color: 7 },
+    { date: '2026-03-30', orders: 16, revenue: 780, bw: 11, color: 5 },
+    { date: '2026-04-01', orders: 22, revenue: 1180, bw: 14, color: 8 },
+  ],
+  topStudents: [
+    { name: 'Maria Santos', studentId: 'STU-2024-001', orders: 15, spent: 750 },
+    { name: 'John Dela Cruz', studentId: 'STU-2024-002', orders: 12, spent: 600 },
+    { name: 'Sarah Johnson', studentId: 'STU-2024-003', orders: 10, spent: 520 },
+    { name: 'Mike Chen', studentId: 'STU-2024-004', orders: 8, spent: 380 },
+    { name: 'Anna Reyes', studentId: 'STU-2024-005', orders: 7, spent: 340 },
+  ],
+  summary: {
+    totalOrders: 113,
+    totalRevenue: 5650,
+    avgOrderValue: 50,
+    bwPercentage: 65,
+    colorPercentage: 35,
+    completionRate: 94,
+  }
+};
 
 export default function ShopAnalytics() {
   const navigate = useNavigate();
-  const { user, accessToken } = useAuth();
-  const [dashboard, setDashboard] = useState<VendorDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<RangeKey>("7d");
+  const [timeRange, setTimeRange] = useState('7days');
 
-  useEffect(() => {
-    let active = true;
+  const handleExportCSV = (type: 'orders' | 'students' | 'daily') => {
+    let csvContent = '';
+    let filename = '';
 
-    async function load() {
-      if (!user?.id || !accessToken) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await fetchVendorDashboardData(accessToken, user.id);
-        if (active) {
-          setDashboard(result);
-        }
-      } catch (err) {
-        console.error("Vendor analytics load failed:", err);
-        if (active) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load analytics",
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
+    if (type === 'orders') {
+      // Export all orders
+      csvContent = 'Date,Order ID,Student Name,Student ID,File Name,Type,Copies,Amount,Status\\n';
+      // Mock order data for export
+      const orders = [
+        ['2026-04-01', 'ORD-001', 'John Doe', 'STU-2024-001', 'Assignment.pdf', 'B&W', '5', '25', 'Completed'],
+        ['2026-04-01', 'ORD-002', 'Jane Smith', 'STU-2024-002', 'Research.docx', 'Color', '10', '150', 'Completed'],
+        ['2026-04-01', 'ORD-003', 'Mike Johnson', 'STU-2024-003', 'Slides.pdf', 'Color', '3', '45', 'Ready'],
+      ];
+      orders.forEach(order => {
+        csvContent += order.join(',') + '\\n';
+      });
+      filename = 'orders_export.csv';
+    } else if (type === 'students') {
+      // Export student analytics
+      csvContent = 'Student Name,Student ID,Total Orders,Total Spent\\n';
+      analyticsData.topStudents.forEach(student => {
+        csvContent += `${student.name},${student.studentId},${student.orders},₱${student.spent}\\n`;
+      });
+      filename = 'student_analytics.csv';
+    } else if (type === 'daily') {
+      // Export daily summary
+      csvContent = 'Date,Orders,Revenue,B&W Orders,Color Orders\\n';
+      analyticsData.daily.forEach(day => {
+        csvContent += `${day.date},${day.orders},₱${day.revenue},${day.bw},${day.color}\\n`;
+      });
+      filename = 'daily_summary.csv';
     }
 
-    void load();
+    // Create and download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
-    return () => {
-      active = false;
-    };
-  }, [accessToken, user?.id]);
-
-  const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
-
-  const filteredOrders = useMemo(() => {
-    const orders = dashboard?.orders ?? [];
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-    return orders.filter(
-      (order) => new Date(order.created_at).getTime() >= cutoff,
-    );
-  }, [dashboard?.orders, days]);
-
-  const metrics = useMemo(
-    () => buildVendorMetrics(filteredOrders),
-    [filteredOrders],
-  );
-  const daily = useMemo(
-    () => buildVendorDailySummary(filteredOrders, Math.min(days, 14)),
-    [filteredOrders, days],
-  );
-  const topCustomers = useMemo(
-    () => buildTopCustomers(filteredOrders),
-    [filteredOrders],
-  );
-
-  const handleExport = (kind: "orders" | "customers" | "daily") => {
-    if (kind === "orders") {
-      exportCsv("vendor_orders.csv", [
-        [
-          "Date",
-          "Order ID",
-          "Student",
-          "Student ID",
-          "File",
-          "Location",
-          "Amount",
-          "Status",
-        ],
-        ...filteredOrders.map((order) => [
-          new Date(order.created_at).toISOString().slice(0, 10),
-          order.id,
-          order.student_name,
-          order.student_id,
-          order.file_name,
-          order.location,
-          String(order.total_amount),
-          order.status,
-        ]),
-      ]);
-    }
-
-    if (kind === "customers") {
-      exportCsv("top_customers.csv", [
-        ["Student", "Student ID", "Orders", "Spent"],
-        ...topCustomers.map((student) => [
-          student.name,
-          student.studentId,
-          String(student.orders),
-          String(student.spent),
-        ]),
-      ]);
-    }
-
-    if (kind === "daily") {
-      exportCsv("daily_summary.csv", [
-        ["Date", "Orders", "Revenue"],
-        ...daily.map((day) => [
-          day.label,
-          String(day.orders),
-          String(day.revenue),
-        ]),
-      ]);
-    }
-
-    toast.success("CSV export downloaded");
+    toast.success(`${filename} downloaded successfully!`);
   };
-
-  if (loading) {
-    return <PageLoader label="Loading analytics…" />;
-  }
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="max-w-md text-sm font-medium text-[#002E2C]">{error}</p>
-        <Button onClick={() => window.location.reload()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Retry
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#E6F1F0] via-white to-[#E6F1F0]">
-      <div className="sticky top-0 z-50 border-b border-[#80B9B6]/20 bg-white/75 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/shop")}
-              className="gap-2 hover:bg-[#E6F1F0]"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-            <div>
-              <h1 className="bg-gradient-to-r from-[#00736D] to-[#002E2C] bg-clip-text text-2xl font-bold text-transparent">
-                Analytics & Reports
-              </h1>
-              <p className="text-sm font-medium text-gray-600">
-                Live vendor metrics pulled from Supabase
-              </p>
+      {/* Modern Header */}
+      <div className="bg-white/70 backdrop-blur-xl border-b border-[#80B9B6]/20 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/shop')}
+                className="gap-2 hover:bg-[#E6F1F0] transition-all"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00736D] to-[#002E2C] bg-clip-text text-transparent">
+                  Analytics & Reports
+                </h1>
+                <p className="text-sm text-gray-600 font-medium">View performance metrics and export data</p>
+              </div>
             </div>
-          </div>
 
-          <Select
-            value={timeRange}
-            onValueChange={(value) => setTimeRange(value as RangeKey)}
-          >
-            <SelectTrigger className="w-[180px] border-[#80B9B6]/30 focus:border-[#00736D]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="w-[180px] border-[#80B9B6]/30 focus:border-[#00736D]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7days">Last 7 Days</SelectItem>
+                <SelectItem value="30days">Last 30 Days</SelectItem>
+                <SelectItem value="90days">Last 90 Days</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-8 px-4 py-8">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-              <p className="mb-2 text-sm font-semibold text-[#00736D]">
-                Total Orders
-              </p>
-              <p className="text-4xl font-black text-[#002E2C]">
-                {metrics.totalOrders}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Live filtered window
-              </p>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* Enhanced Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="relative overflow-hidden p-6 bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200/50 hover:shadow-xl transition-all duration-300 group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200/30 rounded-full -mr-16 -mt-16 group-hover:scale-125 transition-transform duration-500"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-blue-200/40 rounded-xl">
+                    <Package className="w-6 h-6 text-blue-700" />
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-1 text-blue-700">
+                      <TrendingUp className="w-4 h-4" />
+                      <span className="text-xs font-bold">+12%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-blue-700 font-semibold mb-2">Total Orders</p>
+                <p className="text-4xl font-bold text-blue-800 mb-1">{analyticsData.summary.totalOrders}</p>
+                <p className="text-xs text-blue-600">from last period</p>
+              </div>
             </Card>
           </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-          >
-            <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-              <p className="mb-2 text-sm font-semibold text-emerald-700">
-                Revenue
-              </p>
-              <p className="text-4xl font-black text-[#002E2C]">
-                {formatPeso(metrics.revenue)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                From live Supabase orders
-              </p>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <Card className="relative overflow-hidden p-6 bg-gradient-to-br from-emerald-50 to-emerald-100/50 border-emerald-200/50 hover:shadow-xl transition-all duration-300 group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-200/30 rounded-full -mr-16 -mt-16 group-hover:scale-125 transition-transform duration-500"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-emerald-200/40 rounded-xl">
+                    <Banknote className="w-6 h-6 text-emerald-700" />
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-1 text-emerald-700">
+                      <TrendingUp className="w-4 h-4" />
+                      <span className="text-xs font-bold">+18%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-emerald-700 font-semibold mb-2">Total Revenue</p>
+                <p className="text-4xl font-bold text-emerald-800 mb-1">₱{analyticsData.summary.totalRevenue}</p>
+                <p className="text-xs text-emerald-600">from last period</p>
+              </div>
             </Card>
           </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-              <p className="mb-2 text-sm font-semibold text-[#00736D]">
-                Avg order value
-              </p>
-              <p className="text-4xl font-black text-[#002E2C]">
-                {formatPeso(metrics.averageOrderValue)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Per order in this range
-              </p>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="relative overflow-hidden p-6 bg-gradient-to-br from-[#E6F1F0] to-[#80B9B6]/30 border-[#80B9B6]/30 hover:shadow-xl transition-all duration-300 group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-[#80B9B6]/20 rounded-full -mr-16 -mt-16 group-hover:scale-125 transition-transform duration-500"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-[#80B9B6]/40 rounded-xl">
+                    <BarChart3 className="w-6 h-6 text-[#00736D]" />
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-1 text-[#00736D]">
+                      <TrendingUp className="w-4 h-4" />
+                      <span className="text-xs font-bold">+5%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-[#00736D] font-semibold mb-2">Avg Order Value</p>
+                <p className="text-4xl font-bold text-[#002E2C] mb-1">₱{analyticsData.summary.avgOrderValue}</p>
+                <p className="text-xs text-[#00736D]">from last period</p>
+              </div>
             </Card>
           </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-          >
-            <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-              <p className="mb-2 text-sm font-semibold text-violet-700">
-                Completion rate
-              </p>
-              <p className="text-4xl font-black text-[#002E2C]">
-                {metrics.totalOrders
-                  ? Math.round(
-                      (metrics.completedPrints / metrics.totalOrders) * 100,
-                    )
-                  : 0}
-                %
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Completed orders only
-              </p>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Card className="relative overflow-hidden p-6 bg-gradient-to-br from-violet-50 to-violet-100/50 border-violet-200/50 hover:shadow-xl transition-all duration-300 group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-violet-200/30 rounded-full -mr-16 -mt-16 group-hover:scale-125 transition-transform duration-500"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-violet-200/40 rounded-xl">
+                    <PieChart className="w-6 h-6 text-violet-700" />
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-1 text-violet-700">
+                      <TrendingUp className="w-4 h-4" />
+                      <span className="text-xs font-bold">+3%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-violet-700 font-semibold mb-2">Completion Rate</p>
+                <p className="text-4xl font-bold text-violet-800 mb-1">{analyticsData.summary.completionRate}%</p>
+                <p className="text-xs text-violet-600">from last period</p>
+              </div>
             </Card>
           </motion.div>
         </div>
 
-        <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-[#80B9B6]">
-                Exports
-              </p>
-              <h2 className="text-xl font-black text-[#002E2C]">
-                Download live reports
-              </h2>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="outline" onClick={() => handleExport("orders")}>
-                <Download className="mr-2 h-4 w-4" />
-                Orders
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleExport("customers")}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Customers
-              </Button>
-              <Button variant="outline" onClick={() => handleExport("daily")}>
-                <Download className="mr-2 h-4 w-4" />
-                Daily
-              </Button>
-            </div>
-          </div>
-          <p className="text-sm text-slate-600">
-            CSV exports are generated from the same Supabase-backed dataset that
-            powers the dashboard.
-          </p>
-        </Card>
-
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-            <div className="mb-5 flex items-center gap-3">
-              <div className="rounded-2xl bg-[#E6F1F0] p-3 text-[#00736D]">
-                <BarChart3 className="h-5 w-5" />
+        {/* Export Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <Card className="p-8 bg-white/80 backdrop-blur-sm border-[#80B9B6]/20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-gradient-to-br from-[#E6F1F0] to-[#80B9B6]/20 rounded-xl">
+                <Download className="w-6 h-6 text-[#00736D]" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[#002E2C]">
-                  Daily revenue
-                </h2>
-                <p className="text-sm text-slate-500">
-                  Orders and revenue over the selected range
-                </p>
+                <h2 className="text-xl font-bold text-[#002E2C]">Export Data</h2>
+                <p className="text-sm text-gray-600">Download your reports as CSV files</p>
               </div>
             </div>
-
-            <div className="space-y-3">
-              {daily.length ? (
-                daily.map((day) => {
-                  const maxRevenue = Math.max(
-                    ...daily.map((entry) => entry.revenue),
-                    1,
-                  );
-                  return (
-                    <div
-                      key={day.label}
-                      className="rounded-2xl bg-[#F8FCFC] p-4"
-                    >
-                      <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[#002E2C]">
-                        <span>{day.label}</span>
-                        <span>
-                          {formatPeso(day.revenue)} · {day.orders} orders
-                        </span>
-                      </div>
-                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-[#E6F1F0]">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-[#00736D] to-[#002E2C]"
-                          style={{
-                            width: `${Math.max((day.revenue / maxRevenue) * 100, 8)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="rounded-3xl border border-dashed border-[#80B9B6]/30 bg-[#F8FCFC] p-8 text-center text-sm text-slate-500">
-                  No orders in the selected range.
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Button
+                onClick={() => handleExportCSV('orders')}
+                variant="outline"
+                className="h-auto py-6 flex-col items-start gap-3 border-[#80B9B6]/30 hover:bg-[#E6F1F0] hover:border-[#80B9B6] transition-all group"
+              >
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                    <FileText className="w-5 h-5 text-blue-700" />
+                  </div>
+                  <span className="font-bold text-base">All Orders</span>
                 </div>
-              )}
+                <span className="text-xs text-gray-500 text-left">Export complete order history with details</span>
+              </Button>
+
+              <Button
+                onClick={() => handleExportCSV('students')}
+                variant="outline"
+                className="h-auto py-6 flex-col items-start gap-3 border-[#80B9B6]/30 hover:bg-[#E6F1F0] hover:border-[#80B9B6] transition-all group"
+              >
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 bg-violet-100 rounded-lg group-hover:bg-violet-200 transition-colors">
+                    <Users className="w-5 h-5 text-violet-700" />
+                  </div>
+                  <span className="font-bold text-base">Student Analytics</span>
+                </div>
+                <span className="text-xs text-gray-500 text-left">Export top customers and spending data</span>
+              </Button>
+
+              <Button
+                onClick={() => handleExportCSV('daily')}
+                variant="outline"
+                className="h-auto py-6 flex-col items-start gap-3 border-[#80B9B6]/30 hover:bg-[#E6F1F0] hover:border-[#80B9B6] transition-all group"
+              >
+                <div className="flex items-center gap-3 w-full">
+                  <div className="p-2 bg-amber-100 rounded-lg group-hover:bg-amber-200 transition-colors">
+                    <Calendar className="w-5 h-5 text-amber-700" />
+                  </div>
+                  <span className="font-bold text-base">Daily Summary</span>
+                </div>
+                <span className="text-xs text-gray-500 text-left">Export daily performance metrics</span>
+              </Button>
             </div>
           </Card>
+        </motion.div>
 
-          <div className="space-y-6">
-            <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="rounded-2xl bg-[#E6F1F0] p-3 text-[#00736D]">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-[#002E2C]">
-                    Top customers
-                  </h2>
-                  <p className="text-sm text-slate-500">
-                    Students with the highest spend
-                  </p>
-                </div>
+        {/* Daily Performance */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <Card className="p-8 bg-white/80 backdrop-blur-sm border-[#80B9B6]/20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-gradient-to-br from-[#E6F1F0] to-[#80B9B6]/20 rounded-xl">
+                <Calendar className="w-6 h-6 text-[#00736D]" />
               </div>
-              <div className="space-y-3">
-                {topCustomers.length ? (
-                  topCustomers.map((student, index) => (
-                    <div
-                      key={`${student.studentId}-${student.name}`}
-                      className="flex items-center justify-between gap-3 rounded-2xl bg-[#F8FCFC] p-4"
-                    >
-                      <div>
-                        <p className="font-bold text-[#002E2C]">
-                          {index + 1}. {student.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {student.studentId} · {student.orders} orders
-                        </p>
-                      </div>
-                      <p className="text-lg font-black text-emerald-600">
-                        {formatPeso(student.spent)}
-                      </p>
+              <div>
+                <h2 className="text-xl font-bold text-[#002E2C]">Daily Performance</h2>
+                <p className="text-sm text-gray-600">Track your day-to-day operations</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-[#80B9B6]/30">
+                    <th className="text-left py-4 px-4 font-bold text-sm text-[#002E2C]">Date</th>
+                    <th className="text-right py-4 px-4 font-bold text-sm text-[#002E2C]">Orders</th>
+                    <th className="text-right py-4 px-4 font-bold text-sm text-[#002E2C]">Revenue</th>
+                    <th className="text-right py-4 px-4 font-bold text-sm text-[#002E2C]">B&W</th>
+                    <th className="text-right py-4 px-4 font-bold text-sm text-[#002E2C]">Color</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analyticsData.daily.map((day, index) => (
+                    <tr key={index} className="border-b border-[#80B9B6]/10 hover:bg-[#E6F1F0]/30 transition-colors">
+                      <td className="py-4 px-4 text-sm font-medium">{new Date(day.date).toLocaleDateString()}</td>
+                      <td className="py-4 px-4 text-right font-bold text-blue-700">{day.orders}</td>
+                      <td className="py-4 px-4 text-right font-bold text-emerald-600">₱{day.revenue}</td>
+                      <td className="py-4 px-4 text-right font-medium text-gray-700">{day.bw}</td>
+                      <td className="py-4 px-4 text-right font-medium text-gray-700">{day.color}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gradient-to-r from-[#E6F1F0] to-[#80B9B6]/10 font-bold">
+                    <td className="py-4 px-4 text-sm text-[#002E2C]">Total</td>
+                    <td className="py-4 px-4 text-right text-blue-700">
+                      {analyticsData.daily.reduce((sum, day) => sum + day.orders, 0)}
+                    </td>
+                    <td className="py-4 px-4 text-right text-emerald-600">
+                      ₱{analyticsData.daily.reduce((sum, day) => sum + day.revenue, 0)}
+                    </td>
+                    <td className="py-4 px-4 text-right text-gray-700">
+                      {analyticsData.daily.reduce((sum, day) => sum + day.bw, 0)}
+                    </td>
+                    <td className="py-4 px-4 text-right text-gray-700">
+                      {analyticsData.daily.reduce((sum, day) => sum + day.color, 0)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Top Students */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+        >
+          <Card className="p-8 bg-white/80 backdrop-blur-sm border-[#80B9B6]/20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-gradient-to-br from-[#E6F1F0] to-[#80B9B6]/20 rounded-xl">
+                <Users className="w-6 h-6 text-[#00736D]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[#002E2C]">Top Customers</h2>
+                <p className="text-sm text-gray-600">Your most valuable students</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {analyticsData.topStudents.map((student, index) => (
+                <div key={index} className="flex items-center justify-between p-5 bg-gradient-to-r from-[#E6F1F0]/50 to-transparent rounded-xl border border-[#80B9B6]/20 hover:shadow-lg transition-all group">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#00736D] to-[#002E2C] text-white flex items-center justify-center font-bold text-lg shadow-md group-hover:scale-110 transition-transform">
+                      {index + 1}
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-3xl border border-dashed border-[#80B9B6]/30 bg-[#F8FCFC] p-8 text-center text-sm text-slate-500">
-                    No customer data yet.
+                    <div>
+                      <p className="font-bold text-[#002E2C]">{student.name}</p>
+                      <p className="text-sm text-gray-600 font-medium">{student.studentId}</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            </Card>
+                  <div className="text-right">
+                    <p className="font-bold text-xl text-emerald-600">₱{student.spent}</p>
+                    <p className="text-sm text-gray-600">{student.orders} orders</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </motion.div>
 
-            <Card className="border-[#80B9B6]/20 bg-white/85 p-6">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="rounded-2xl bg-[#E6F1F0] p-3 text-[#00736D]">
-                  <PieChart className="h-5 w-5" />
+        {/* Print Type Distribution */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+        >
+          <Card className="p-8 bg-white/80 backdrop-blur-sm border-[#80B9B6]/20">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-gradient-to-br from-[#E6F1F0] to-[#80B9B6]/20 rounded-xl">
+                <PieChart className="w-6 h-6 text-[#00736D]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[#002E2C]">Print Type Distribution</h2>
+                <p className="text-sm text-gray-600">Breakdown of print preferences</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gradient-to-r from-gray-600 to-gray-700"></div>
+                    <span className="text-sm font-bold text-gray-700">Black & White</span>
+                  </div>
+                  <span className="text-2xl font-bold text-[#002E2C]">{analyticsData.summary.bwPercentage}%</span>
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-[#002E2C]">
-                    Highlights
-                  </h2>
-                  <p className="text-sm text-slate-500">
-                    Fast view of this window
-                  </p>
+                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-gray-600 to-gray-700 h-4 rounded-full transition-all duration-1000"
+                    style={{ width: `${analyticsData.summary.bwPercentage}%` }}
+                  />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-2xl bg-[#F8FCFC] p-4">
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#80B9B6]">
-                    Pending
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-[#002E2C]">
-                    {metrics.pendingOrders}
-                  </p>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gradient-to-r from-[#00736D] to-[#002E2C]"></div>
+                    <span className="text-sm font-bold text-gray-700">Color</span>
+                  </div>
+                  <span className="text-2xl font-bold text-[#002E2C]">{analyticsData.summary.colorPercentage}%</span>
                 </div>
-                <div className="rounded-2xl bg-[#F8FCFC] p-4">
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#80B9B6]">
-                    Completed
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-[#002E2C]">
-                    {metrics.completedPrints}
-                  </p>
+                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-[#00736D] to-[#002E2C] h-4 rounded-full transition-all duration-1000"
+                    style={{ width: `${analyticsData.summary.colorPercentage}%` }}
+                  />
                 </div>
               </div>
-            </Card>
-          </div>
-        </div>
+            </div>
+          </Card>
+        </motion.div>
       </div>
     </div>
   );
