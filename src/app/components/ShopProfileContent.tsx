@@ -72,6 +72,12 @@ export function ShopProfileContent({
                 Flagship
               </span>
             )}
+            {shop.tier === "premium" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#002E2C] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                <Sparkles className="h-3 w-3" />
+                Premium Partner
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm font-medium text-[#80B9B6]">
             {shop.hours}
@@ -132,8 +138,9 @@ export function ShopProfileContent({
         <div className="flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50/90 px-3.5 py-3 backdrop-blur-sm">
           <Sparkles className="h-4 w-4 shrink-0 text-[#00736D]" />
           <p className="text-xs font-semibold text-rose-700">
-            Shop is offline — AI auto-reply can reserve your slot until the
-            owner returns.
+            {shop.tier === "premium"
+              ? "Shop is offline — Groq AI auto-reply can reserve your slot until the owner returns."
+              : "Shop is offline — please check back later or contact the owner directly."}
           </p>
         </div>
       )}

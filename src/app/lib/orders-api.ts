@@ -24,6 +24,7 @@ export interface OrderRow {
   file_url: string | null;
   cloudinary_public_id: string | null;
   location: string;
+  shop_id?: string | null;
   settings: PrintSettings;
   gcash_ref_number: string;
   total_amount: number;
@@ -138,6 +139,7 @@ export interface CreateOrderInput {
   fileUrl: string;
   cloudinaryPublicId?: string;
   location: string;
+  shopId?: string | null;
   settings: PrintSettings;
   gcashRefNumber: string;
   totalAmount: number;
@@ -159,6 +161,7 @@ export async function createOrder(
     file_url: input.fileUrl,
     cloudinary_public_id: input.cloudinaryPublicId ?? null,
     location: input.location,
+    shop_id: input.shopId ?? null,
     settings: input.settings,
     gcash_ref_number: input.gcashRefNumber,
     total_amount: input.totalAmount,
@@ -212,6 +215,7 @@ export async function createOrder(
     fileName: input.fileName,
     fileUrl: input.fileUrl,
     location: input.location,
+    shopId: input.shopId ?? null,
     settings: input.settings,
     gcashRefNumber: input.gcashRefNumber,
     totalAmount: input.totalAmount,

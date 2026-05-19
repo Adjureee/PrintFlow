@@ -17,7 +17,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
-import { getShopBySlug } from "../../lib/print-shops";
+import {
+  fetchPublicPrintShopBySlug,
+  type PrintShop,
+} from "../../lib/print-shops";
 import { useAuth } from "../../lib/auth-context";
 import {
   sendShopChatMessage,
@@ -227,9 +230,10 @@ function DatePill({ label }: { label: string }) {
 export default function ChatAssistant() {
   const navigate = useNavigate();
   const { shopSlug } = useParams<{ shopSlug: string }>();
-  const shop = shopSlug ? getShopBySlug(shopSlug) : undefined;
   const { accessToken } = useAuth();
 
+  const [shop, setShop] = useState<PrintShop | null>(null);
+  const [loadingShop, setLoadingShop] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -241,6 +245,31 @@ export default function ChatAssistant() {
   const initialized = useRef(false);
 
   const isOffline = shop?.status === "offline";
+
+  useEffect(() => {
+    let active = true;
+
+    if (!shopSlug) {
+      setLoadingShop(false);
+      return;
+    }
+
+    void fetchPublicPrintShopBySlug(shopSlug)
+      .then((result) => {
+        if (active) {
+          setShop(result ?? null);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingShop(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [shopSlug]);
 
   useEffect(() => {
     if (!shop || initialized.current) return;
@@ -313,9 +342,11 @@ export default function ChatAssistant() {
       const reply = await sendShopChatMessage(
         accessToken,
         {
+          shopId: shop.id,
           slug: shop.slug,
           name: shop.name,
           status: shop.status,
+          tier: shop.tier,
           address: shop.address,
           hours: shop.hours,
           services: shop.services,
@@ -384,8 +415,44 @@ export default function ChatAssistant() {
     setUploadSuccess(true);
   };
 
+  if (loadingShop) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white">
+        <p className="text-sm font-semibold text-[#80B9B6]">
+          Loading chat partner...
+        </p>
+      </div>
+    );
+  }
+
   if (!shopSlug || !shop) {
     return <Navigate to="/" replace />;
+  }
+
+  if (shop.tier !== "premium") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-[#E6F1F0] via-white to-[#E6F1F0] p-4">
+        <div className="w-full max-w-md rounded-3xl border border-[#80B9B6]/20 bg-white/90 p-6 text-center shadow-xl">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E6F1F0]">
+            <Sparkles className="h-6 w-6 text-[#00736D]" />
+          </div>
+          <h1 className="text-xl font-black text-[#002E2C]">
+            Premium Partner required
+          </h1>
+          <p className="mt-2 text-sm text-[#80B9B6]">
+            Groq AI reservations are reserved for premium vendors only. This
+            shop currently uses the standard map listing tier.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(`/shops/${shop.slug}`)}
+            className="mt-5 w-full rounded-2xl bg-gradient-to-r from-[#00736D] to-[#002E2C] py-3 text-sm font-bold text-white"
+          >
+            View Shop Profile
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

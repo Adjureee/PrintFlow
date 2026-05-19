@@ -4,8 +4,84 @@ import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js";
+import Groq from "npm:groq-sdk";
 import * as kv from "./kv_store.ts";
 const app = new Hono();
+
+type AppRole = "student" | "vendor" | "superadmin";
+
+function normalizeRoleInput(role: unknown): AppRole {
+  if (role === "student" || role === "vendor" || role === "superadmin") {
+    return role;
+  }
+
+  // Legacy compatibility for old role names used in earlier clients.
+  if (role === "shop") {
+    return "vendor";
+  }
+
+  if (role === "admin") {
+    return "superadmin";
+  }
+
+  return "student";
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+function getServiceClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") || "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+  );
+}
+
+async function getAuthorizedUser(
+  c: Parameters<typeof app.use>[1] extends (...args: infer A) => any
+    ? A[0]
+    : never,
+) {
+  const accessToken = c.req.header("Authorization")?.split(" ")[1];
+
+  if (!accessToken) {
+    return {
+      accessToken: null,
+      user: null,
+      errorResponse: c.json({ error: "Unauthorized" }, 401),
+    };
+  }
+
+  const supabase = getServiceClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(accessToken);
+
+  if (error || !user) {
+    return {
+      accessToken,
+      user: null,
+      errorResponse: c.json({ error: "Unauthorized" }, 401),
+    };
+  }
+
+  return { accessToken, user, errorResponse: null as Response | null };
+}
+
+function getUserRole(user: { user_metadata?: Record<string, unknown> }) {
+  return (
+    ((user.user_metadata?.role || user.user_metadata?.userType) as
+      | AppRole
+      | undefined) ?? "student"
+  );
+}
 
 // Enable logger
 app.use("*", logger(console.log));
@@ -30,21 +106,24 @@ app.get("/server/health", (c) => {
 // Signup endpoint
 app.post("/server/signup", async (c) => {
   try {
-    const { email, password, name, userType } = await c.req.json();
+    const { email, password, name, role, userType } = await c.req.json();
+    const normalizedRole = normalizeRoleInput(role ?? userType);
 
-    if (!email || !password || !name || !userType) {
+    if (!email || !password || !name) {
       return c.json({ error: "Missing required fields" }, 400);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-    );
+    const supabase = getServiceClient();
 
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      user_metadata: { name, userType },
+      user_metadata: {
+        name,
+        role: normalizedRole,
+        subscription_tier:
+          normalizedRole === "vendor" ? "standard" : "standard",
+      },
       // Automatically confirm the user's email since an email server hasn't been configured.
       email_confirm: true,
     });
@@ -69,6 +148,18 @@ app.post("/server/signup", async (c) => {
       return c.json({ error: error.message }, 400);
     }
 
+    await supabase.from("profiles").upsert(
+      {
+        id: data.user.id,
+        email,
+        name,
+        role: normalizedRole,
+        subscription_tier:
+          normalizedRole === "vendor" ? "standard" : "standard",
+      },
+      { onConflict: "id" },
+    );
+
     return c.json({
       success: true,
       message: "Account created successfully. Please sign in.",
@@ -85,30 +176,16 @@ app.post("/server/signup", async (c) => {
 // Update profile endpoint
 app.post("/server/update-profile", async (c) => {
   try {
-    const accessToken = c.req.header("Authorization")?.split(" ")[1];
-
-    if (!accessToken) {
-      return c.json({ error: "Unauthorized" }, 401);
+    const auth = await getAuthorizedUser(c);
+    if (auth.errorResponse) {
+      return auth.errorResponse;
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-    );
-
-    // Verify user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(accessToken);
-
-    if (authError || !user) {
-      console.error("Auth error:", authError);
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const { accessToken, user } = auth;
+    const supabase = getServiceClient();
 
     // Get profile data from request
-    const { name, phone, address, studentId, shopLocation, waitTime } =
+    const { name, phone, address, studentId, shopLocation, waitTime, role } =
       await c.req.json();
 
     // Update user metadata
@@ -121,6 +198,7 @@ app.post("/server/update-profile", async (c) => {
         studentId: studentId || user.user_metadata?.studentId || "",
         shopLocation: shopLocation || user.user_metadata?.shopLocation || "",
         waitTime: waitTime || user.user_metadata?.waitTime || "",
+        role: role || getUserRole(user),
       },
     });
 
@@ -140,27 +218,251 @@ app.post("/server/update-profile", async (c) => {
   }
 });
 
+// Vendor registration endpoint
+app.post("/server/vendor/register", async (c) => {
+  try {
+    const auth = await getAuthorizedUser(c);
+    if (auth.errorResponse) {
+      return auth.errorResponse;
+    }
+
+    const { user } = auth;
+    if (getUserRole(user) !== "vendor" && getUserRole(user) !== "superadmin") {
+      return c.json({ error: "Only vendor accounts can register shops" }, 403);
+    }
+
+    const body = await c.req.json();
+    const shopName = String(body?.shopName ?? "").trim();
+    const address = String(body?.address ?? "").trim();
+    const description = String(body?.description ?? "").trim();
+    const hours = String(body?.hours ?? "").trim();
+    const phone = String(body?.phone ?? "").trim();
+    const tier = body?.tier === "premium" ? "premium" : "standard";
+    const latitude = Number(body?.latitude);
+    const longitude = Number(body?.longitude);
+    const services = Array.isArray(body?.services) ? body.services : [];
+
+    if (
+      !shopName ||
+      !address ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return c.json(
+        { error: "Shop name, address, and map pin are required" },
+        400,
+      );
+    }
+
+    const supabase = getServiceClient();
+    const slug = slugify(shopName);
+
+    await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        email: user.email,
+        name: shopName,
+        role: "vendor",
+        subscription_tier: tier,
+      },
+      { onConflict: "id" },
+    );
+
+    const existingShop = await supabase
+      .from("print_shops")
+      .select("id, status")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    const status =
+      existingShop.data?.status === "suspended" ? "suspended" : "verified";
+    const online = body?.isOnline !== false && status === "verified";
+
+    const { error } = await supabase.from("print_shops").upsert(
+      {
+        owner_id: user.id,
+        shop_name: shopName,
+        slug,
+        description: description || "Partner print shop on PrintFlow.",
+        address,
+        latitude,
+        longitude,
+        wait_time: Number(body?.waitTime ?? 15),
+        online,
+        status,
+        tier,
+        hours: hours || "Hours pending",
+        services,
+        phone: phone || null,
+        email: user.email,
+      },
+      { onConflict: "owner_id" },
+    );
+
+    if (error) {
+      console.error("Vendor registration error:", error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        ...user.user_metadata,
+        name: shopName,
+        role: "vendor",
+        shopLocation: address,
+        waitTime: String(body?.waitTime ?? 15),
+      },
+    });
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Vendor registration error:", error);
+    return c.json({ error: "Failed to save vendor profile" }, 500);
+  }
+});
+
+// Super admin vendor directory
+app.get("/server/admin/vendors", async (c) => {
+  try {
+    const auth = await getAuthorizedUser(c);
+    if (auth.errorResponse) {
+      return auth.errorResponse;
+    }
+
+    const { user } = auth;
+    if (getUserRole(user) !== "superadmin") {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const supabase = getServiceClient();
+    const { data: users, error } = await supabase.auth.admin.listUsers();
+
+    if (error) {
+      return c.json({ error: error.message }, 400);
+    }
+
+    const vendorUsers = (users?.users ?? []).filter((candidate) => {
+      const role = getUserRole(candidate);
+      return role === "vendor";
+    });
+
+    const ownerIds = vendorUsers.map((candidate) => candidate.id);
+    const { data: shops } = await supabase
+      .from("print_shops")
+      .select(
+        "owner_id, shop_name, slug, status, online, tier, latitude, longitude, hours, services, phone",
+      )
+      .in(
+        "owner_id",
+        ownerIds.length > 0
+          ? ownerIds
+          : ["00000000-0000-0000-0000-000000000000"],
+      );
+
+    const shopByOwner = new Map(
+      (shops ?? []).map((shop) => [shop.owner_id, shop]),
+    );
+
+    return c.json({
+      vendors: vendorUsers.map((candidate) => {
+        const shop = shopByOwner.get(candidate.id);
+        return {
+          userId: candidate.id,
+          email: candidate.email ?? "",
+          name: String(candidate.user_metadata?.name ?? "Vendor"),
+          role: getUserRole(candidate),
+          shopName: String(
+            shop?.shop_name ?? candidate.user_metadata?.name ?? "Vendor",
+          ),
+          shopSlug: String(shop?.slug ?? ""),
+          approvalStatus: shop?.status ?? "pending",
+          online: Boolean(shop?.online),
+          tier: shop?.tier ?? "standard",
+          latitude: shop?.latitude ?? null,
+          longitude: shop?.longitude ?? null,
+          hours: shop?.hours ?? null,
+          services: shop?.services ?? [],
+          phone: shop?.phone ?? null,
+          createdAt: candidate.created_at,
+        };
+      }),
+    });
+  } catch (error) {
+    console.error("Vendor directory error:", error);
+    return c.json({ error: "Failed to load vendors" }, 500);
+  }
+});
+
+// Super admin vendor status actions
+app.post("/server/admin/vendors/:vendorId", async (c) => {
+  try {
+    const auth = await getAuthorizedUser(c);
+    if (auth.errorResponse) {
+      return auth.errorResponse;
+    }
+
+    const { user } = auth;
+    if (getUserRole(user) !== "superadmin") {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const vendorId = c.req.param("vendorId");
+    const { action } = await c.req.json();
+    const supabase = getServiceClient();
+
+    if (!vendorId || !action) {
+      return c.json({ error: "Missing vendor action" }, 400);
+    }
+
+    if (action === "delete") {
+      await supabase.from("print_shops").delete().eq("owner_id", vendorId);
+      await supabase.from("profiles").delete().eq("id", vendorId);
+      const { error } = await supabase.auth.admin.deleteUser(vendorId);
+
+      if (error) {
+        return c.json({ error: error.message }, 400);
+      }
+
+      return c.json({ success: true });
+    }
+
+    const nextStatus = action === "approve" ? "verified" : "suspended";
+    const nextOnline = action === "approve";
+
+    const { error } = await supabase
+      .from("print_shops")
+      .update({ status: nextStatus, online: nextOnline })
+      .eq("owner_id", vendorId);
+
+    if (error) {
+      return c.json({ error: error.message }, 400);
+    }
+
+    const existingUser = await supabase.auth.admin.getUserById(vendorId);
+    await supabase.auth.admin.updateUserById(vendorId, {
+      user_metadata: {
+        ...(existingUser.data.user?.user_metadata ?? {}),
+        role: "vendor",
+        vendorStatus: nextStatus,
+      },
+    });
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Vendor action error:", error);
+    return c.json({ error: "Failed to update vendor" }, 500);
+  }
+});
+
 // Groq shop auto-reply (offline reservation bot)
 app.post("/server/shop-chat", async (c) => {
   try {
-    const accessToken = c.req.header("Authorization")?.split(" ")[1];
-    if (!accessToken) {
-      return c.json({ error: "Unauthorized" }, 401);
+    const auth = await getAuthorizedUser(c);
+    if (auth.errorResponse) {
+      return auth.errorResponse;
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-    );
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(accessToken);
-
-    if (authError || !user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const { user } = auth;
 
     const groqKey = Deno.env.get("GROQ_API_KEY");
 
@@ -175,20 +477,56 @@ app.post("/server/shop-chat", async (c) => {
     }
 
     const body = await c.req.json();
-    const shop = body?.shop;
+    const shopId = String(body?.shop?.shopId ?? body?.shopId ?? "").trim();
+    const shopSlug = String(body?.shop?.slug ?? body?.shopSlug ?? "").trim();
     const messages = body?.messages;
 
-    if (!shop?.name || !Array.isArray(messages) || messages.length === 0) {
-      return c.json({ error: "shop and messages are required" }, 400);
+    if (
+      (!shopId && !shopSlug) ||
+      !Array.isArray(messages) ||
+      messages.length === 0
+    ) {
+      return c.json(
+        { error: "shopId or shopSlug and messages are required" },
+        400,
+      );
     }
 
-    const systemInstruction = `You are the Offline Auto-Reply assistant for "${shop.name}", a campus print shop on the PrintFlow platform at Davao del Norte State College (DNSC), Philippines.
+    const supabase = getServiceClient();
+    let shopQuery = supabase
+      .from("print_shops")
+      .select(
+        "id, owner_id, shop_name, slug, description, address, latitude, longitude, wait_time, online, status, tier, hours, services, email, phone",
+      );
+
+    shopQuery = shopId
+      ? shopQuery.eq("id", shopId)
+      : shopQuery.eq("slug", shopSlug);
+
+    const { data: shop, error: shopError } = await shopQuery.maybeSingle();
+
+    if (shopError || !shop) {
+      return c.json({ error: "Requested shop not found" }, 404);
+    }
+
+    if (shop.tier !== "premium") {
+      return c.json(
+        {
+          error:
+            "Groq AI reservations require a Premium subscription for this shop.",
+          requiredTier: "premium",
+        },
+        403,
+      );
+    }
+
+    const systemInstruction = `You are the Groq-powered reservation assistant for "${shop.shop_name}", a premium partner print shop on the PrintFlow platform at Davao del Norte State College (DNSC), Philippines.
 
 Shop details:
 - Status: ${shop.status}
 - Address: ${shop.address}
 - Hours: ${shop.hours}
-- Typical wait: ~${shop.waitTime} minutes
+- Typical wait: ~${shop.wait_time} minutes
 - Services: ${(shop.services || []).join(", ")}
 
 Your role:
@@ -208,45 +546,22 @@ Respond ONLY with valid JSON matching this schema:
 
 Set reservationConfirmed to true only when the student has agreed to a specific pickup time and you have confirmed it.`;
 
-    let rawText = "";
+    const groq = new Groq({ apiKey: groqKey });
+    const completion = await groq.chat.completions.create({
+      model: Deno.env.get("GROQ_MODEL") || "llama3-8b-8192",
+      messages: [
+        { role: "system", content: systemInstruction },
+        ...messages.map((m: { role: string; text: string }) => ({
+          role: m.role === "user" ? "user" : "assistant",
+          content: m.text,
+        })),
+      ],
+      max_tokens: 512,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+    });
 
-    if (groqKey) {
-      try {
-        const groqRes = await fetch(
-          "https://api.groq.com/openai/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${groqKey}`,
-            },
-            body: JSON.stringify({
-              model: "llama-3.1-8b-instant",
-              messages: [
-                { role: "system", content: systemInstruction },
-                ...messages.map((m: { role: string; text: string }) => ({
-                  role: m.role === "user" ? "user" : "assistant",
-                  content: m.text,
-                })),
-              ],
-              max_tokens: 512,
-              temperature: 0.7,
-              response_format: { type: "json_object" },
-            }),
-          },
-        );
-
-        if (!groqRes.ok) {
-          const errText = await groqRes.text();
-          console.error("Groq API error:", groqRes.status, errText);
-        } else {
-          const groqData = await groqRes.json();
-          rawText = groqData?.choices?.[0]?.message?.content ?? "";
-        }
-      } catch (e) {
-        console.error("Groq request failed:", e);
-      }
-    }
+    const rawText = completion.choices[0]?.message?.content ?? "";
 
     if (!rawText) {
       return c.json(
@@ -318,6 +633,19 @@ Set reservationConfirmed to true only when the student has agreed to a specific 
       parsed = JSON.parse(extractJsonText(rawText));
     } catch {
       console.error("Failed to parse AI JSON:", rawText);
+      return c.json(
+        {
+          message:
+            "I'm having trouble formatting my response. Could you repeat your preferred pickup time?",
+          reservationConfirmed: false,
+          pickupTime: null,
+          pickupDate: null,
+        },
+        200,
+      );
+    }
+
+    if (!parsed?.message) {
       return c.json(
         {
           message:

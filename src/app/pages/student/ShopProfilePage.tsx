@@ -1,13 +1,51 @@
-import { useNavigate, useParams, Navigate } from 'react-router';
-import { ArrowLeft } from 'lucide-react';
-import { motion } from 'motion/react';
-import { getShopBySlug } from '../../lib/print-shops';
-import { ShopProfileContent } from '../../components/ShopProfileContent';
+import { useEffect, useState } from "react";
+import { useNavigate, useParams, Navigate } from "react-router";
+import { ArrowLeft } from "lucide-react";
+import { motion } from "motion/react";
+import {
+  fetchPublicPrintShopBySlug,
+  type PrintShop,
+} from "../../lib/print-shops";
+import { ShopProfileContent } from "../../components/ShopProfileContent";
 
 export default function ShopProfilePage() {
   const navigate = useNavigate();
   const { shopSlug } = useParams<{ shopSlug: string }>();
-  const shop = shopSlug ? getShopBySlug(shopSlug) : undefined;
+  const [shop, setShop] = useState<PrintShop | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!shopSlug) {
+      setLoading(false);
+      return;
+    }
+
+    void fetchPublicPrintShopBySlug(shopSlug)
+      .then((result) => {
+        if (active) {
+          setShop(result ?? null);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [shopSlug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white px-4 py-10 text-center text-sm text-[#80B9B6]">
+        Loading shop profile...
+      </div>
+    );
+  }
 
   if (!shopSlug || !shop) {
     return <Navigate to="/" replace />;

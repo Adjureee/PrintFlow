@@ -1,35 +1,45 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
-import { motion } from 'motion/react';
-import { Printer, Mail, Lock, User, Building, UserPlus, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Card } from '../../components/ui/card';
-import { Label } from '../../components/ui/label';
-import { useAuth } from '../../lib/auth-context';
+import { useState } from "react";
+import { useNavigate, Link } from "react-router";
+import { motion } from "motion/react";
+import {
+  Printer,
+  Mail,
+  Lock,
+  User,
+  Building,
+  UserPlus,
+  AlertCircle,
+  Sparkles,
+  CheckCircle2,
+} from "lucide-react";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Card } from "../../components/ui/card";
+import { Label } from "../../components/ui/label";
+import { useAuth } from "../../lib/auth-context";
 
 export default function Signup() {
   const navigate = useNavigate();
   const { signUp } = useAuth();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [userType, setUserType] = useState<'student' | 'shop'>('student');
-  const [error, setError] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [userType, setUserType] = useState<"student" | "vendor">("student");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError("Password must be at least 6 characters");
       return;
     }
 
@@ -39,10 +49,10 @@ export default function Signup() {
 
     if (result.success) {
       setTimeout(() => {
-        navigate('/');
+        navigate("/");
       }, 100);
     } else {
-      setError(result.error || 'Signup failed. Please try again.');
+      setError(result.error || "Signup failed. Please try again.");
     }
 
     setLoading(false);
@@ -54,12 +64,12 @@ export default function Signup() {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           animate={{ scale: [1, 1.2, 1], rotate: [0, 90, 0] }}
-          transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           className="absolute -top-24 -right-24 w-96 h-96 bg-gradient-to-br from-[#00736D]/5 to-[#80B9B6]/5 rounded-full blur-3xl"
         />
         <motion.div
           animate={{ scale: [1.2, 1, 1.2], rotate: [90, 0, 90] }}
-          transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
           className="absolute -bottom-24 -left-24 w-96 h-96 bg-gradient-to-tr from-[#002E2C]/5 to-[#00736D]/5 rounded-full blur-3xl"
         />
       </div>
@@ -79,14 +89,14 @@ export default function Signup() {
         >
           <motion.div
             whileHover={{ scale: 1.05, rotate: -5 }}
-            transition={{ type: 'spring', stiffness: 300 }}
+            transition={{ type: "spring", stiffness: 300 }}
             className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#00736D] to-[#002E2C] rounded-3xl mb-5 shadow-2xl shadow-[#00736D]/30 relative"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-[#00736D] to-[#002E2C] rounded-3xl blur opacity-50" />
             <Printer className="w-10 h-10 text-white relative z-10" />
             <motion.div
               animate={{ rotate: 360 }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
               className="absolute -top-1 -right-1"
             >
               <Sparkles className="w-5 h-5 text-[#80B9B6]" />
@@ -95,7 +105,9 @@ export default function Signup() {
           <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-[#002E2C] via-[#00736D] to-[#002E2C] bg-clip-text text-transparent mb-2">
             Join PrintFlow
           </h1>
-          <p className="text-[#00736D]/80 text-base sm:text-lg">Start your printing journey today</p>
+          <p className="text-[#00736D]/80 text-base sm:text-lg">
+            Start your printing journey today
+          </p>
         </motion.div>
 
         {/* Signup Card */}
@@ -135,43 +147,51 @@ export default function Signup() {
                   {/* Student */}
                   <motion.button
                     type="button"
-                    onClick={() => setUserType('student')}
+                    onClick={() => setUserType("student")}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     className={`relative flex flex-col items-center justify-center gap-2 py-4 px-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 focus:outline-none ${
-                      userType === 'student'
-                        ? 'bg-gradient-to-br from-[#E6F1F0] to-[#E6F1F0]/60 border-[#00736D] shadow-lg shadow-[#00736D]/15'
-                        : 'border-[#80B9B6]/25 hover:border-[#80B9B6]/50 bg-white/50'
+                      userType === "student"
+                        ? "bg-gradient-to-br from-[#E6F1F0] to-[#E6F1F0]/60 border-[#00736D] shadow-lg shadow-[#00736D]/15"
+                        : "border-[#80B9B6]/25 hover:border-[#80B9B6]/50 bg-white/50"
                     }`}
                   >
-                    {userType === 'student' && (
+                    {userType === "student" && (
                       <CheckCircle2 className="absolute top-2 right-2 w-4 h-4 text-[#00736D]" />
                     )}
-                    <div className={`p-2.5 rounded-xl transition-colors ${userType === 'student' ? 'bg-[#00736D]/15' : 'bg-[#E6F1F0]/60'}`}>
+                    <div
+                      className={`p-2.5 rounded-xl transition-colors ${userType === "student" ? "bg-[#00736D]/15" : "bg-[#E6F1F0]/60"}`}
+                    >
                       <User className="w-5 h-5 text-[#00736D]" />
                     </div>
-                    <span className="font-bold text-[#002E2C] text-sm leading-none">Student</span>
+                    <span className="font-bold text-[#002E2C] text-sm leading-none">
+                      Student
+                    </span>
                   </motion.button>
 
-                  {/* Shop */}
+                  {/* Vendor */}
                   <motion.button
                     type="button"
-                    onClick={() => setUserType('shop')}
+                    onClick={() => setUserType("vendor")}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     className={`relative flex flex-col items-center justify-center gap-2 py-4 px-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 focus:outline-none ${
-                      userType === 'shop'
-                        ? 'bg-gradient-to-br from-[#E6F1F0] to-[#E6F1F0]/60 border-[#00736D] shadow-lg shadow-[#00736D]/15'
-                        : 'border-[#80B9B6]/25 hover:border-[#80B9B6]/50 bg-white/50'
+                      userType === "vendor"
+                        ? "bg-gradient-to-br from-[#E6F1F0] to-[#E6F1F0]/60 border-[#00736D] shadow-lg shadow-[#00736D]/15"
+                        : "border-[#80B9B6]/25 hover:border-[#80B9B6]/50 bg-white/50"
                     }`}
                   >
-                    {userType === 'shop' && (
+                    {userType === "vendor" && (
                       <CheckCircle2 className="absolute top-2 right-2 w-4 h-4 text-[#00736D]" />
                     )}
-                    <div className={`p-2.5 rounded-xl transition-colors ${userType === 'shop' ? 'bg-[#00736D]/15' : 'bg-[#E6F1F0]/60'}`}>
+                    <div
+                      className={`p-2.5 rounded-xl transition-colors ${userType === "vendor" ? "bg-[#00736D]/15" : "bg-[#E6F1F0]/60"}`}
+                    >
                       <Building className="w-5 h-5 text-[#00736D]" />
                     </div>
-                    <span className="font-bold text-[#002E2C] text-sm leading-none">Shop</span>
+                    <span className="font-bold text-[#002E2C] text-sm leading-none">
+                      Shop
+                    </span>
                   </motion.button>
                 </div>
               </motion.div>
@@ -183,11 +203,14 @@ export default function Signup() {
                 transition={{ delay: 0.45 }}
                 className="space-y-2"
               >
-                <Label htmlFor="name" className="text-xs font-bold text-[#002E2C] tracking-widest uppercase">
-                  {userType === 'student' ? 'Full Name' : 'Shop Name'}
+                <Label
+                  htmlFor="name"
+                  className="text-xs font-bold text-[#002E2C] tracking-widest uppercase"
+                >
+                  {userType === "student" ? "Full Name" : "Shop Name"}
                 </Label>
                 <div className="relative group">
-                  {userType === 'student' ? (
+                  {userType === "student" ? (
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#80B9B6] transition-colors group-focus-within:text-[#00736D]" />
                   ) : (
                     <Building className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#80B9B6] transition-colors group-focus-within:text-[#00736D]" />
@@ -195,7 +218,9 @@ export default function Signup() {
                   <Input
                     id="name"
                     type="text"
-                    placeholder={userType === 'student' ? 'John Doe' : 'My Print Shop'}
+                    placeholder={
+                      userType === "student" ? "John Doe" : "My Print Shop"
+                    }
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
@@ -211,7 +236,10 @@ export default function Signup() {
                 transition={{ delay: 0.5 }}
                 className="space-y-2"
               >
-                <Label htmlFor="email" className="text-xs font-bold text-[#002E2C] tracking-widest uppercase">
+                <Label
+                  htmlFor="email"
+                  className="text-xs font-bold text-[#002E2C] tracking-widest uppercase"
+                >
                   Email Address
                 </Label>
                 <div className="relative group">
@@ -236,7 +264,10 @@ export default function Signup() {
                   transition={{ delay: 0.55 }}
                   className="space-y-2"
                 >
-                  <Label htmlFor="password" className="text-xs font-bold text-[#002E2C] tracking-widest uppercase">
+                  <Label
+                    htmlFor="password"
+                    className="text-xs font-bold text-[#002E2C] tracking-widest uppercase"
+                  >
                     Password
                   </Label>
                   <div className="relative group">
@@ -259,7 +290,10 @@ export default function Signup() {
                   transition={{ delay: 0.6 }}
                   className="space-y-2"
                 >
-                  <Label htmlFor="confirmPassword" className="text-xs font-bold text-[#002E2C] tracking-widest uppercase">
+                  <Label
+                    htmlFor="confirmPassword"
+                    className="text-xs font-bold text-[#002E2C] tracking-widest uppercase"
+                  >
                     Confirm Password
                   </Label>
                   <div className="relative group">
@@ -297,7 +331,11 @@ export default function Signup() {
                     <span className="flex items-center justify-center gap-2">
                       <motion.div
                         animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
                         className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
                       />
                       Creating Account…
@@ -318,7 +356,9 @@ export default function Signup() {
                 <div className="w-full border-t-2 border-[#E6F1F0]" />
               </div>
               <div className="relative flex justify-center">
-                <span className="px-4 bg-white/80 text-[#80B9B6] font-semibold text-sm backdrop-blur-sm">OR</span>
+                <span className="px-4 bg-white/80 text-[#80B9B6] font-semibold text-sm backdrop-blur-sm">
+                  OR
+                </span>
               </div>
             </div>
 
@@ -329,7 +369,7 @@ export default function Signup() {
               transition={{ delay: 0.7 }}
               className="text-center text-sm text-[#002E2C]/70"
             >
-              Already have an account?{' '}
+              Already have an account?{" "}
               <Link
                 to="/login"
                 className="font-bold text-[#00736D] hover:text-[#002E2C] transition-colors relative group"
