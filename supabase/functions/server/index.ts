@@ -69,7 +69,6 @@ app.post("/server/signup", async (c) => {
       return c.json({ error: error.message }, 400);
     }
 
-<<<<<<< HEAD
     const { error: profileError } = await supabase.from("profiles").upsert(
       {
         id: data.user.id,
@@ -99,8 +98,6 @@ app.post("/server/signup", async (c) => {
       );
     }
 
-=======
->>>>>>> parent of e99a495 (finalizing pt.1)
     return c.json({
       success: true,
       message: "Account created successfully. Please sign in.",
