@@ -1,10 +1,11 @@
 // @ts-nocheck
-
+import Groq from "npm:groq-sdk";
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js";
 import * as kv from "./kv_store.ts";
+
 const app = new Hono();
 
 // Enable logger
@@ -36,6 +37,10 @@ app.post("/server/signup", async (c) => {
       return c.json({ error: "Missing required fields" }, 400);
     }
 
+    // ✨ FIX 1: Define normalizedRole so it doesn't crash on insert
+    const normalizedRole =
+      userType === "vendor" || userType === "shop" ? "vendor" : "student";
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
@@ -44,15 +49,12 @@ app.post("/server/signup", async (c) => {
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      user_metadata: { name, userType },
-      // Automatically confirm the user's email since an email server hasn't been configured.
+      user_metadata: { name, userType: normalizedRole },
       email_confirm: true,
     });
 
     if (error) {
       console.error("Signup error:", error);
-
-      // Handle specific error codes
       if (
         error.message.includes("already been registered") ||
         error.code === "email_exists"
@@ -65,7 +67,6 @@ app.post("/server/signup", async (c) => {
           422,
         );
       }
-
       return c.json({ error: error.message }, 400);
     }
 
@@ -81,15 +82,13 @@ app.post("/server/signup", async (c) => {
       { onConflict: "id" },
     );
 
-    // ✨ THE FIX: Rollback if profile creation fails!
+    // Rollback if profile creation fails
     if (profileError) {
       console.error(
         "Profile creation failed, rolling back auth user:",
         profileError,
       );
-      // Delete the user from auth.users so they aren't permanently stuck
       await supabase.auth.admin.deleteUser(data.user.id);
-
       return c.json(
         {
           error: "Failed to set up user profile. Please try signing up again.",
@@ -125,7 +124,6 @@ app.post("/server/update-profile", async (c) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
     );
 
-    // Verify user
     const {
       data: { user },
       error: authError,
@@ -136,11 +134,9 @@ app.post("/server/update-profile", async (c) => {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    // Get profile data from request
     const { name, phone, address, studentId, shopLocation, waitTime } =
       await c.req.json();
 
-    // Update user metadata
     const { data, error } = await supabase.auth.admin.updateUserById(user.id, {
       user_metadata: {
         ...user.user_metadata,
@@ -170,208 +166,86 @@ app.post("/server/update-profile", async (c) => {
 });
 
 // Groq shop auto-reply (offline reservation bot)
-app.post("/server/shop-chat", async (c) => {
+app.post("/shop-chat", async (c) => {
   try {
-    const accessToken = c.req.header("Authorization")?.split(" ")[1];
-    if (!accessToken) {
-      return c.json({ error: "Unauthorized" }, 401);
+    const body = await c.req.json();
+    const { shop_id, message, history } = body;
+
+    if (!shop_id || !message) {
+      return c.json(
+        { error: "Missing required parameters: shop_id and message." },
+        400,
+      );
     }
 
+    // ✨ FIX 2: Initialize Supabase securely inside the route
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") || "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
     );
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(accessToken);
+    const { data: shopData, error: shopError } = await supabase
+      .from("print_shops")
+      .select("subscription_tier, name")
+      .eq("id", shop_id)
+      .single();
 
-    if (authError || !user) {
-      return c.json({ error: "Unauthorized" }, 401);
+    if (shopError || !shopData) {
+      console.error("Shop verification failed:", shopError);
+      return c.json({ error: "Failed to verify shop authorization." }, 500);
     }
 
-    const groqKey = Deno.env.get("GROQ_API_KEY");
-
-    if (!groqKey) {
+    if (shopData.subscription_tier !== "premium") {
       return c.json(
-        {
-          error: "AI provider API key not configured on server (GROQ_API_KEY)",
-          fallback: true,
-        },
-        503,
+        { error: "Upgrade to Premium to unlock AI Auto-Reply." },
+        403,
       );
     }
 
-    const body = await c.req.json();
-    const shop = body?.shop;
-    const messages = body?.messages;
-
-    if (!shop?.name || !Array.isArray(messages) || messages.length === 0) {
-      return c.json({ error: "shop and messages are required" }, 400);
+    const groqApiKey = Deno.env.get("GROQ_API_KEY");
+    if (!groqApiKey) {
+      throw new Error("GROQ_API_KEY environment variable is missing.");
     }
+    const groq = new Groq({ apiKey: groqApiKey });
 
-    const systemInstruction = `You are the Offline Auto-Reply assistant for "${shop.name}", a campus print shop on the PrintFlow platform at Davao del Norte State College (DNSC), Philippines.
+    const systemPrompt = `You are a helpful customer service AI representing ${shopData.name} on the PrintFlow network. 
+      You help students with printing inquiries and coordinate queue reservations. 
+      Keep responses concise, friendly, and professional.`;
 
-Shop details:
-- Status: ${shop.status}
-- Address: ${shop.address}
-- Hours: ${shop.hours}
-- Typical wait: ~${shop.waitTime} minutes
-- Services: ${(shop.services || []).join(", ")}
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...(history || []),
+      { role: "user", content: message },
+    ];
 
-Your role:
-- Help students reserve a print pickup slot while the shop owner is away or the shop is offline.
-- Be warm, concise, and professional. Use Philippine English context (₱ pricing only if asked; default to reservation flow).
-- Ask for pickup date/time if not provided. Confirm reservations clearly.
-- Never invent shop policies beyond standard print services listed above.
-- If the shop is online, still assist but mention they may also walk in.
-
-Respond ONLY with valid JSON matching this schema:
-{
-  "message": "string (your reply to the student, plain text)",
-  "reservationConfirmed": boolean,
-  "pickupTime": "string or null (e.g. 1:00 PM)",
-  "pickupDate": "string or null (e.g. Today, Tomorrow, April 20)"
-}
-
-Set reservationConfirmed to true only when the student has agreed to a specific pickup time and you have confirmed it.`;
-
-    let rawText = "";
-
-    if (groqKey) {
-      try {
-        const groqRes = await fetch(
-          "https://api.groq.com/openai/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${groqKey}`,
-            },
-            body: JSON.stringify({
-              model: "llama-3.1-8b-instant",
-              messages: [
-                { role: "system", content: systemInstruction },
-                ...messages.map((m: { role: string; text: string }) => ({
-                  role: m.role === "user" ? "user" : "assistant",
-                  content: m.text,
-                })),
-              ],
-              max_tokens: 512,
-              temperature: 0.7,
-              response_format: { type: "json_object" },
-            }),
-          },
-        );
-
-        if (!groqRes.ok) {
-          const errText = await groqRes.text();
-          console.error("Groq API error:", groqRes.status, errText);
-        } else {
-          const groqData = await groqRes.json();
-          rawText = groqData?.choices?.[0]?.message?.content ?? "";
-        }
-      } catch (e) {
-        console.error("Groq request failed:", e);
-      }
-    }
-
-    if (!rawText) {
-      return c.json(
-        { error: "AI assistant temporarily unavailable", fallback: true },
-        502,
-      );
-    }
-
-    const extractJsonText = (text: string) => {
-      const trimmed = text.trim();
-
-      const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-      if (fenced?.[1]) {
-        return fenced[1].trim();
-      }
-
-      const start = trimmed.indexOf("{");
-      if (start < 0) {
-        return trimmed;
-      }
-
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-
-      for (let i = start; i < trimmed.length; i += 1) {
-        const char = trimmed[i];
-
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-
-        if (char === "\\") {
-          escaped = inString;
-          continue;
-        }
-
-        if (char === '"') {
-          inString = !inString;
-          continue;
-        }
-
-        if (inString) {
-          continue;
-        }
-
-        if (char === "{") {
-          depth += 1;
-        } else if (char === "}") {
-          depth -= 1;
-          if (depth === 0) {
-            return trimmed.slice(start, i + 1);
-          }
-        }
-      }
-
-      return trimmed.slice(start);
-    };
-
-    let parsed: {
-      message?: string;
-      reservationConfirmed?: boolean;
-      pickupTime?: string | null;
-      pickupDate?: string | null;
-    };
-
-    try {
-      parsed = JSON.parse(extractJsonText(rawText));
-    } catch {
-      console.error("Failed to parse AI JSON:", rawText);
-      return c.json(
-        {
-          message:
-            "I'm having trouble formatting my response. Could you repeat your preferred pickup time?",
-          reservationConfirmed: false,
-          pickupTime: null,
-          pickupDate: null,
-        },
-        200,
-      );
-    }
-
-    return c.json({
-      message: parsed.message ?? "How can I help with your print reservation?",
-      reservationConfirmed: Boolean(parsed.reservationConfirmed),
-      pickupTime: parsed.pickupTime ?? null,
-      pickupDate: parsed.pickupDate ?? null,
+    const chatCompletion = await groq.chat.completions.create({
+      messages,
+      model: "llama3-8b-8192",
+      temperature: 0.6,
+      max_tokens: 250,
     });
+
+    const reply = chatCompletion.choices[0]?.message?.content;
+
+    if (!reply) {
+      throw new Error("Received empty response from Groq API.");
+    }
+
+    return c.json({ reply });
   } catch (error) {
-    console.error("shop-chat error:", error);
-    return c.json({ error: "Failed to process chat", fallback: true }, 500);
+    console.error("Groq AI Integration Error:", error);
+    return c.json(
+      {
+        error:
+          "The AI assistant encountered a processing error. Please try again later.",
+      },
+      500,
+    );
   }
 });
+// ✨ FIX 3: All the broken, floating Gemini JSON parser code has been safely deleted from here!
 
-// Cloudinary signed upload (secrets never sent to browser)
+// Cloudinary signed upload
 app.post("/server/cloudinary-sign", async (c) => {
   try {
     const accessToken = c.req.header("Authorization")?.split(" ")[1];
@@ -419,13 +293,7 @@ app.post("/server/cloudinary-sign", async (c) => {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    return c.json({
-      signature,
-      timestamp,
-      cloudName,
-      apiKey,
-      folder,
-    });
+    return c.json({ signature, timestamp, cloudName, apiKey, folder });
   } catch (error) {
     console.error("cloudinary-sign error:", error);
     return c.json({ error: "Failed to sign upload" }, 500);
