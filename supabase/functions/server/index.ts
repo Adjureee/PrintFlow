@@ -148,7 +148,7 @@ app.post("/server/signup", async (c) => {
       return c.json({ error: error.message }, 400);
     }
 
-    await supabase.from("profiles").upsert(
+    const { error: profileError } = await supabase.from("profiles").upsert(
       {
         id: data.user.id,
         email,
@@ -159,6 +159,23 @@ app.post("/server/signup", async (c) => {
       },
       { onConflict: "id" },
     );
+
+    // ✨ THE FIX: Rollback if profile creation fails!
+    if (profileError) {
+      console.error(
+        "Profile creation failed, rolling back auth user:",
+        profileError,
+      );
+      // Delete the user from auth.users so they aren't permanently stuck
+      await supabase.auth.admin.deleteUser(data.user.id);
+
+      return c.json(
+        {
+          error: "Failed to set up user profile. Please try signing up again.",
+        },
+        500,
+      );
+    }
 
     return c.json({
       success: true,
