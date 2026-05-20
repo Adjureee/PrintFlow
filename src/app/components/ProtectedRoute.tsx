@@ -1,7 +1,5 @@
-"use client";
-
-import { Navigate, Outlet, useLocation } from "react-router";
-import { useAuth } from "../lib/auth-context";
+import { Navigate, Outlet, useLocation } from 'react-router';
+import { useAuth } from '../lib/auth-context';
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth();
@@ -24,21 +22,21 @@ export function ProtectedRoute() {
 
   // Redirect based on user type
   const isShopRoute =
-    location.pathname === "/shop" || location.pathname.startsWith("/shop/");
+    location.pathname === '/shop' || location.pathname.startsWith('/shop/');
   const isStudentRoute =
-    location.pathname === "/" ||
-    location.pathname.startsWith("/settings") ||
-    location.pathname.startsWith("/status") ||
-    location.pathname.startsWith("/shops") ||
-    (location.pathname.startsWith("/profile") && !isShopRoute);
+    location.pathname === '/' ||
+    location.pathname.startsWith('/settings') ||
+    location.pathname.startsWith('/status') ||
+    location.pathname.startsWith('/shops') ||
+    (location.pathname.startsWith('/profile') && !isShopRoute);
 
   // If shop user tries to access student routes, redirect to shop dashboard
-  if (user.userType === "shop" && isStudentRoute) {
+  if (user.userType === 'shop' && isStudentRoute) {
     return <Navigate to="/shop" replace />;
   }
 
   // If student user tries to access shop routes, redirect to student home
-  if (user.userType === "student" && isShopRoute) {
+  if (user.userType === 'student' && isShopRoute) {
     return <Navigate to="/" replace />;
   }
 

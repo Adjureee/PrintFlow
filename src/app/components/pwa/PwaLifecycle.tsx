@@ -4,15 +4,6 @@ import { registerSW } from "virtual:pwa-register";
 
 export function PwaLifecycle() {
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      void navigator.serviceWorker
-        ?.getRegistrations?.()
-        .then((registrations) => {
-          registrations.forEach((registration) => registration.unregister());
-        });
-      return;
-    }
-
     const updateServiceWorker = registerSW({
       immediate: true,
       onOfflineReady() {

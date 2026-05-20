@@ -5,10 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite",
-    "nav": "node scripts/navigation-map.mjs",
-    "nav:md": "node scripts/navigation-map.mjs --markdown",
-    "nav:json": "node scripts/navigation-map.mjs --json"
+    "dev": "vite"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

@@ -1,14 +1,6 @@
-"use client";
-
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
-import { createClient } from "@supabase/supabase-js";
-import { projectId, publicAnonKey } from "../../../utils/supabase/info";
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 const supabase = createClient(supabaseUrl, publicAnonKey);
@@ -17,7 +9,7 @@ interface User {
   id: string;
   email: string;
   name: string;
-  userType: "student" | "shop";
+  userType: 'student' | 'shop';
   phone?: string;
   address?: string;
   studentId?: string;
@@ -29,25 +21,10 @@ interface AuthContextType {
   user: User | null;
   accessToken: string | null;
   loading: boolean;
-  signIn: (
-    email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  signUp: (
-    email: string,
-    password: string,
-    name: string,
-    userType: "student" | "shop",
-  ) => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (email: string, password: string, name: string, userType: 'student' | 'shop') => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
-  updateProfile: (profileData: {
-    name?: string;
-    phone?: string;
-    address?: string;
-    studentId?: string;
-    shopLocation?: string;
-    waitTime?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (profileData: { name?: string; phone?: string; address?: string; studentId?: string; shopLocation?: string; waitTime?: string }) => Promise<{ success: boolean; error?: string }>;
   refreshUser: () => Promise<void>;
 }
 
@@ -66,17 +43,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkSession = async () => {
     try {
       const { data, error } = await supabase.auth.getSession();
-
+      
       if (error) throw error;
-
+      
       if (data.session) {
         const { access_token, user: authUser } = data.session;
         setAccessToken(access_token);
         setUser({
           id: authUser.id,
-          email: authUser.email || "",
-          name: authUser.user_metadata?.name || "",
-          userType: authUser.user_metadata?.userType || "student",
+          email: authUser.email || '',
+          name: authUser.user_metadata?.name || '',
+          userType: authUser.user_metadata?.userType || 'student',
           phone: authUser.user_metadata?.phone,
           address: authUser.user_metadata?.address,
           studentId: authUser.user_metadata?.studentId,
@@ -85,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (error) {
-      console.error("Session check error:", error);
+      console.error('Session check error:', error);
     } finally {
       setLoading(false);
     }
@@ -106,58 +83,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { access_token, user: authUser } = data.session;
         const userData = {
           id: authUser.id,
-          email: authUser.email || "",
-          name: authUser.user_metadata?.name || "",
-          userType: authUser.user_metadata?.userType || "student",
+          email: authUser.email || '',
+          name: authUser.user_metadata?.name || '',
+          userType: authUser.user_metadata?.userType || 'student',
           phone: authUser.user_metadata?.phone,
           address: authUser.user_metadata?.address,
           studentId: authUser.user_metadata?.studentId,
           shopLocation: authUser.user_metadata?.shopLocation,
           waitTime: authUser.user_metadata?.waitTime,
         };
-
+        
         setAccessToken(access_token);
         setUser(userData);
-
+        
         return { success: true };
       }
 
-      return { success: false, error: "No session returned" };
+      return { success: false, error: 'No session returned' };
     } catch (error) {
-      console.error("Sign in error:", error);
-      return { success: false, error: "Sign in failed. Please try again." };
+      console.error('Sign in error:', error);
+      return { success: false, error: 'Sign in failed. Please try again.' };
     }
   };
 
-  const signUp = async (
-    email: string,
-    password: string,
-    name: string,
-    userType: "student" | "shop",
-  ) => {
+  const signUp = async (email: string, password: string, name: string, userType: 'student' | 'shop') => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/signup`,
+        `https://${projectId}.supabase.co/functions/v1/make-server-73bd5aa5/signup`,
         {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`,
           },
           body: JSON.stringify({ email, password, name, userType }),
-        },
+        }
       );
 
       const result = await response.json();
 
       if (!response.ok) {
-        return { success: false, error: result.error || "Sign up failed" };
+        return { success: false, error: result.error || 'Sign up failed' };
       }
 
       return { success: true };
     } catch (error) {
-      console.error("Sign up error:", error);
-      return { success: false, error: "Sign up failed. Please try again." };
+      console.error('Sign up error:', error);
+      return { success: false, error: 'Sign up failed. Please try again.' };
     }
   };
 
@@ -167,47 +139,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setAccessToken(null);
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error('Sign out error:', error);
     }
   };
 
-  const updateProfile = async (profileData: {
-    name?: string;
-    phone?: string;
-    address?: string;
-    studentId?: string;
-    shopLocation?: string;
-    waitTime?: string;
-  }) => {
+  const updateProfile = async (profileData: { name?: string; phone?: string; address?: string; studentId?: string; shopLocation?: string; waitTime?: string }) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/server/update-profile`,
+        `https://${projectId}.supabase.co/functions/v1/make-server-73bd5aa5/update-profile`,
         {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify(profileData),
-        },
+        }
       );
 
       const result = await response.json();
 
       if (!response.ok) {
-        return { success: false, error: result.error || "Update failed" };
+        return { success: false, error: result.error || 'Update failed' };
       }
 
       // Refresh the session to get updated user data
       await refreshUser();
-
+      
       return { success: true };
     } catch (error) {
-      console.error("Update profile error:", error);
-      return {
-        success: false,
-        error: "Update profile failed. Please try again.",
-      };
+      console.error('Update profile error:', error);
+      return { success: false, error: 'Update profile failed. Please try again.' };
     }
   };
 
@@ -224,9 +186,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(access_token);
         setUser({
           id: authUser.id,
-          email: authUser.email || "",
-          name: authUser.user_metadata?.name || "",
-          userType: authUser.user_metadata?.userType || "student",
+          email: authUser.email || '',
+          name: authUser.user_metadata?.name || '',
+          userType: authUser.user_metadata?.userType || 'student',
           phone: authUser.user_metadata?.phone,
           address: authUser.user_metadata?.address,
           studentId: authUser.user_metadata?.studentId,
@@ -235,23 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (error) {
-      console.error("Refresh user error:", error);
+      console.error('Refresh user error:', error);
     }
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        accessToken,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        updateProfile,
-        refreshUser,
-      }}
-    >
+    <AuthContext.Provider value={{ user, accessToken, loading, signIn, signUp, signOut, updateProfile, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -260,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
